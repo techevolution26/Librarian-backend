@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
+from app.core.security import get_current_user
 from app.models.book import Book
 from app.models.library_item import LibraryItem
 from app.models.user import User
@@ -18,13 +19,6 @@ from app.schemas.library import (
 )
 
 router = APIRouter(prefix="/library", tags=["library"])
-
-
-def get_default_user(db: Session) -> User:
-    user = db.scalar(select(User).order_by(User.id))
-    if not user:
-        raise HTTPException(status_code=404, detail="No user found")
-    return user
 
 
 def to_library_item_read(row: LibraryItem) -> LibraryItemRead:
@@ -56,12 +50,13 @@ def to_library_item_read(row: LibraryItem) -> LibraryItemRead:
 
 
 @router.get("/", response_model=list[LibraryItemRead])
-def list_library_items(db: Session = Depends(get_db)) -> list[LibraryItemRead]:
-    user = get_default_user(db)
-
+def list_library_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[LibraryItemRead]:
     rows = db.scalars(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id)
+        .where(LibraryItem.user_id == current_user.id)
         .options(joinedload(LibraryItem.book))
         .order_by(LibraryItem.updated_at.desc(), LibraryItem.id.desc())
     ).all()
@@ -70,12 +65,13 @@ def list_library_items(db: Session = Depends(get_db)) -> list[LibraryItemRead]:
 
 
 @router.get("/summary", response_model=LibrarySummary)
-def get_library_summary(db: Session = Depends(get_db)) -> LibrarySummary:
-    user = get_default_user(db)
-
+def get_library_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LibrarySummary:
     rows = db.scalars(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id)
+        .where(LibraryItem.user_id == current_user.id)
         .options(joinedload(LibraryItem.book))
     ).all()
 
@@ -103,16 +99,18 @@ def get_library_summary(db: Session = Depends(get_db)) -> LibrarySummary:
 def add_to_library(
     payload: LibraryMutationCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LibraryItemRead:
-    user = get_default_user(db)
-
     book = db.scalar(select(Book).where(Book.id == payload.book_id))
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
     existing = db.scalar(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id, LibraryItem.book_id == payload.book_id)
+        .where(
+            LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == payload.book_id,
+        )
         .options(joinedload(LibraryItem.book))
     )
 
@@ -124,7 +122,7 @@ def add_to_library(
         return to_library_item_read(existing)
 
     item = LibraryItem(
-        user_id=user.id,
+        user_id=current_user.id,
         book_id=payload.book_id,
         status=payload.status,
         progress=0,
@@ -137,6 +135,9 @@ def add_to_library(
         .where(LibraryItem.id == item.id)
         .options(joinedload(LibraryItem.book))
     )
+    if not row:
+        raise HTTPException(status_code=500, detail="Failed to load created library item")
+
     return to_library_item_read(row)
 
 
@@ -144,18 +145,20 @@ def add_to_library(
 def start_reading(
     payload: StartReadingPayload,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LibraryItemRead:
-    user = get_default_user(db)
-
     item = db.scalar(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id, LibraryItem.book_id == payload.book_id)
+        .where(
+            LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == payload.book_id,
+        )
         .options(joinedload(LibraryItem.book))
     )
 
     if not item:
         item = LibraryItem(
-            user_id=user.id,
+            user_id=current_user.id,
             book_id=payload.book_id,
             status="reading",
             progress=0,
@@ -164,11 +167,15 @@ def start_reading(
         )
         db.add(item)
         db.commit()
+
         row = db.scalar(
             select(LibraryItem)
             .where(LibraryItem.id == item.id)
             .options(joinedload(LibraryItem.book))
         )
+        if not row:
+            raise HTTPException(status_code=500, detail="Failed to load created library item")
+
         return to_library_item_read(row)
 
     item.status = "reading"
@@ -178,6 +185,7 @@ def start_reading(
     db.add(item)
     db.commit()
     db.refresh(item)
+
     return to_library_item_read(item)
 
 
@@ -186,12 +194,14 @@ def save_pdf_progress(
     book_id: int,
     payload: PdfProgressUpdate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LibraryItemRead:
-    user = get_default_user(db)
-
     item = db.scalar(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id, LibraryItem.book_id == book_id)
+        .where(
+            LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == book_id,
+        )
         .options(joinedload(LibraryItem.book))
     )
 
@@ -220,12 +230,14 @@ def save_pdf_progress(
 def get_library_item_for_book(
     book_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> LibraryItemRead:
-    user = get_default_user(db)
-
     item = db.scalar(
         select(LibraryItem)
-        .where(LibraryItem.user_id == user.id, LibraryItem.book_id == book_id)
+        .where(
+            LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == book_id,
+        )
         .options(joinedload(LibraryItem.book))
     )
 

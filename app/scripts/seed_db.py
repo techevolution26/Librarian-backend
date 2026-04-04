@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from app.core.security import hash_password
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -25,7 +26,7 @@ BOOK_SEED = [
     {
         "title": "Deep Work",
         "author": "Cal Newport",
-        "cover": "/deepwork.jpg",
+        "cover": "/deepwork.webp",
         "description": "Rules for focused success in a distracted world.",
         "rating": 4.7,
         "pages": 304,
@@ -39,7 +40,7 @@ BOOK_SEED = [
     {
         "title": "The Innovator's Dilemma",
         "author": "Clayton M. Christensen",
-        "cover": "/theinnovatorsdilemma.jpg",
+        "cover": "/theinnovatorsdilemma.webp",
         "description": "A book about disruptive innovation and how companies can avoid it.",
         "rating": 4.6,
         "pages": 288,
@@ -48,7 +49,7 @@ BOOK_SEED = [
     {
         "title": "The 4-Hour Workweek",
         "author": "Tim Ferriss",
-        "cover": "/the4hourworkweek.jpg",
+        "cover": "/the4hourworkweek.png",
         "description": "A guide to lifestyle design and productivity.",
         "rating": 4.6,
         "pages": 320,
@@ -67,11 +68,13 @@ def seed() -> None:
         db: Session
 
         user = User(
-            full_name="Tech Resolute",
-            email="techresolute@example.com",
-            plan="free",
-            avatar_url=None,
-        )
+    full_name="Tech Resolute",
+    email="techresolute@example.com",
+    password_hash=hash_password("password123"),
+    plan="free",
+    avatar_url=None,
+    is_active=True,
+)
         db.add(user)
         db.flush()
 
@@ -113,34 +116,34 @@ def seed() -> None:
 
         db.flush()
 
-        library_items = [
-            LibraryItem(
-                user_id=user.id,
-                book_id=books[0].id,
-                status="reading",
-                progress=78,
-            ),
-            LibraryItem(
-                user_id=user.id,
-                book_id=books[1].id,
-                status="reading",
-                progress=42,
-            ),
-            LibraryItem(
-                user_id=user.id,
-                book_id=books[2].id,
-                status="saved",
-                progress=0,
-            ),
-            LibraryItem(
-                user_id=user.id,
-                book_id=books[3].id,
-                status="finished",
-                progress=100,
-                finished_at=datetime.now(timezone.utc),
-            ),
-        ]
-        db.add_all(library_items)
+        # library_items = [
+        #     LibraryItem(
+        #         user_id=user.id,
+        #         book_id=books[0].id,
+        #         status="reading",
+        #         progress=78,
+        #     ),
+        #     LibraryItem(
+        #         user_id=user.id,
+        #         book_id=books[1].id,
+        #         status="reading",
+        #         progress=42,
+        #     ),
+        #     LibraryItem(
+        #         user_id=user.id,
+        #         book_id=books[2].id,
+        #         status="saved",
+        #         progress=0,
+        #     ),
+        #     LibraryItem(
+        #         user_id=user.id,
+        #         book_id=books[3].id,
+        #         status="finished",
+        #         progress=100,
+        #         finished_at=datetime.now(timezone.utc),
+        #     ),
+        # ]
+        # db.add_all(library_items)
         db.commit()
 
         result = db.execute(text("SELECT COUNT(*) AS count FROM books"))
