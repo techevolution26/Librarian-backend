@@ -66,6 +66,21 @@ BOOK_SEED = [
     "source_path": null
   },
   {
+    "title": "The Holy Bible (KJV)",
+    "author": "Various Authors",
+    "cover": "/kingjamesbibleholybiblekjvannotated.jpg",
+    "description": "The King James Version of the Holy Bible.",
+    "rating": 5.0,
+    "pages": 742,
+    "genre": ["Christianity", "Faith"],
+    "source_type": "pdf",
+    "content_text": "Sample content...",
+    "mime_type": "application/pdf",
+    "source_url": null,
+    "source_path": null
+
+  },
+  {
     "title": "Knowing God",
     "author": "J.I. Packer",
     "cover": "/knowinggod.jpg",
@@ -135,20 +150,34 @@ BOOK_SEED = [
     "source_url": null,
     "source_path": null
   },
-#   {
-#     "title": "Blue Like Jazz",
-#     "author": "Donald Miller",
-#     "cover": "/bluelikejazz.jpg",
-#     "description": "Non-religious thoughts on Christian spirituality.",
-#     "rating": 4.5,
-#     "pages": 256,
-#     "genre": ["Christianity", "Faith"],
-#     "source_type": "pdf",
-#     "content_text": "Sample content...",
-#     "mime_type": "application/pdf",
-#     "source_url": null,
-#     "source_path": null
-#   },
+  {
+    "title": "The Holy Bible",
+    "author": "Various Authors",
+    "cover": "/theholybible.jpg",
+    "description": "Translated out of the Original Tongues: and with the Former Translations Diligently Comparedand Revised, by His Majesty’s Special Command.",
+    "rating": 5.0,
+    "pages": 2462,
+    "genre": ["Christianity", "Faith"],
+    "source_type": "pdf",
+    "content_text": "Sample content...",
+    "mime_type": "application/pdf",
+    "source_url": null,
+    "source_path": null
+  },
+  {
+    "title": "The Holy Bible (LSV)",
+    "author": "Various Authors",
+    "cover": "/theholybible-lsv.jpg",
+    "description": "The Literal Standard Version of the Holy Bible.",
+    "rating": 5.0,
+    "pages": 771,
+    "genre": ["Christianity", "Faith"],
+    "source_type": "pdf",
+    "content_text": "Sample content...",
+    "mime_type": "application/pdf",
+    "source_url": null,
+    "source_path": null
+  },
   {
     "title": "Prayer Fasting & the Pursuit of God",
     "author": "David Platt",
@@ -156,6 +185,20 @@ BOOK_SEED = [
     "description": "A practical guide to prayer, fasting, and the pursuit of God.",
     "rating": 4.6,
     "pages": 260,
+    "genre": ["Christianity", "Faith"],
+    "source_type": "pdf",
+    "content_text": "Sample content...",
+    "mime_type": "application/pdf",
+    "source_url": null,
+    "source_path": null
+  },
+  {
+    "title": "The Holy Bible (NIV)",
+    "author": "Various Authors",
+    "cover": "/theholybible-niv.jpg",
+    "description": "The New International Version of the Holy Bible.",
+    "rating": 5.0,
+    "pages": 1751,
     "genre": ["Christianity", "Faith"],
     "source_type": "pdf",
     "content_text": "Sample content...",
