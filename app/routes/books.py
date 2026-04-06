@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from uuid import uuid4
 
@@ -102,6 +103,50 @@ async def upload_pdf_book(
     book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
 
     db.add(book)
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+
+@router.patch("/{book_id}/update-pdf", response_model=BookRead)
+async def update_book_pdf_only(
+    request: Request,
+    book_id: int,
+    pdf_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+) -> BookRead:
+    # 1. Validation & Setup
+    if pdf_file.content_type != "application/pdf":
+        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+
+    book = db.query(Book).filter(Book.id == book_id).first()
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    # 2. Cleanup: Delete the old file from disk if it exists
+    if book.source_path and os.path.exists(book.source_path):
+        try:
+            os.remove(book.source_path)
+        except OSError:
+            pass # Log error if needed, but don't stop the update
+
+    # 3. Save New File (Following your naming pattern)
+    suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
+    filename = f"{uuid4().hex}{suffix}"
+    destination = PDF_STORAGE_DIR / filename
+
+    file_bytes = await pdf_file.read()
+    destination.write_bytes(file_bytes)
+
+    # 4. Update Database Fields
+    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
+    
+    book.source_url = source_url
+    book.source_path = str(destination)
+    book.mime_type = "application/pdf"
+
     db.commit()
     db.refresh(book)
 

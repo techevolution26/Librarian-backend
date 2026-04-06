@@ -10,6 +10,7 @@ from app.core.security import (
     verify_password,
 )
 from app.models.user import User
+from app.models.user_settings import UserSettings
 from app.schemas.auth import AuthUserRead, LoginRequest, SignupRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -32,6 +33,23 @@ def signup(
         is_active=True,
     )
     db.add(user)
+
+    settings = UserSettings(
+        user_id=user.id,
+        theme="dark",
+        density="comfortable",
+        reading_mode="scroll",
+        font_size="medium",
+        line_height="comfortable",
+        auto_bookmark=True,
+        show_progress_bar=True,
+        email_updates=True,
+        reading_reminders=True,
+        product_announcements=False,
+        profile_visibility="private",
+        share_reading_activity=False,
+        )
+    db.add(settings)
     db.commit()
     db.refresh(user)
 

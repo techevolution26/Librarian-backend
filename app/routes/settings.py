@@ -5,6 +5,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.schemas.settings import UserSettingsRead, UserSettingsUpdate
+from app.models.user_settings import UserSettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -44,13 +45,67 @@ def build_settings_response(user: User) -> UserSettingsRead:
     )
 
 
+def ensure_user_settings(db: Session, user: User) -> UserSettings:
+    if user.settings:
+        return user.settings
+
+    settings = UserSettings(
+        user_id=user.id,
+        theme="dark",
+        density="comfortable",
+        reading_mode="scroll",
+        font_size="medium",
+        line_height="comfortable",
+        auto_bookmark=True,
+        show_progress_bar=True,
+        email_updates=True,
+        reading_reminders=True,
+        product_announcements=False,
+        profile_visibility="private",
+        share_reading_activity=False,
+    )
+    db.add(settings)
+    db.commit()
+    db.refresh(settings)
+    db.refresh(user)
+
+    return settings
+
+
+
 @router.get("/", response_model=UserSettingsRead)
 def get_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserSettingsRead:
-    db.refresh(current_user, attribute_names=["settings"])
-    return build_settings_response(current_user)
+   settings = ensure_user_settings(db, current_user)
+   return UserSettingsRead(
+        account={
+            "full_name": current_user.full_name,
+            "email": current_user.email,
+            "plan": current_user.plan,
+        },
+        appearance={
+            "theme": settings.theme,
+            "density": settings.density,
+            "reading_mode": settings.reading_mode,
+        },
+        reading={
+            "font_size": settings.font_size,
+            "line_height": settings.line_height,
+            "auto_bookmark": settings.auto_bookmark,
+            "show_progress_bar": settings.show_progress_bar,
+        },
+        notifications={
+            "email_updates": settings.email_updates,
+            "reading_reminders": settings.reading_reminders,
+            "product_announcements": settings.product_announcements,
+        },
+        privacy={
+            "profile_visibility": settings.profile_visibility,
+            "share_reading_activity": settings.share_reading_activity,
+        },
+    )
 
 
 @router.patch("/", response_model=UserSettingsRead)
