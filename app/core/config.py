@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     app_name: str = "The Librarian API"
     database_url: str
-    cors_origins: list[str] = []
+    cors_origins: list[str] = ["https://thelibrarian-sigma.vercel.app/","https://thelibrarian-git-master-global-techresolute-app.vercel.app/",]
 
     secret_key: str
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
