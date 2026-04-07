@@ -81,8 +81,8 @@ def login(
         key="access_token",
         value=token,
         httponly=True,
-        samesite="lax",
-        secure=False,  # change to True in production over HTTPS
+        samesite="None",
+        secure=True,
         max_age=60 * 60 * 24 * 7,
         path="/",
     )
