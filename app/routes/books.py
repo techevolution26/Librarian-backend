@@ -7,13 +7,13 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.storage import BOOKS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
 from app.models.book import Book
 from app.schemas.book import BookContentRead, BookRead
 
 router = APIRouter(prefix="/books", tags=["books"])
 
-PDF_STORAGE_DIR = Path("storage/books")
-PDF_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+ensure_storage_dirs()
 
 
 def to_book_read(row: Book) -> BookRead:
@@ -75,17 +75,17 @@ async def upload_pdf_book(
     pdf_file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> BookRead:
-    if pdf_file.content_type not in {"application/pdf"}:
+    if pdf_file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
     suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
     filename = f"{uuid4().hex}{suffix}"
-    destination = PDF_STORAGE_DIR / filename
+    destination = BOOKS_STORAGE_DIR / filename
 
     file_bytes = await pdf_file.read()
     destination.write_bytes(file_bytes)
 
-    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
+    source_url = build_public_file_url(str(request.base_url), "books", filename)
 
     book = Book(
         title=title,
@@ -109,7 +109,6 @@ async def upload_pdf_book(
     return to_book_read(book)
 
 
-
 @router.patch("/{book_id}/update-pdf", response_model=BookRead)
 async def update_book_pdf_only(
     request: Request,
@@ -117,36 +116,35 @@ async def update_book_pdf_only(
     pdf_file: UploadFile = File(...),
     db: Session = Depends(get_db),
 ) -> BookRead:
-    # 1. Validation & Setup
     if pdf_file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
-    book = db.query(Book).filter(Book.id == book_id).first()
+    book = db.scalar(select(Book).where(Book.id == book_id))
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    # 2. Cleanup: Delete the old file from disk if it exists
     if book.source_path and os.path.exists(book.source_path):
         try:
             os.remove(book.source_path)
         except OSError:
-            pass # Log error if needed, but don't stop the update
+            pass
 
-    # 3. Save New File (Following your naming pattern)
     suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
     filename = f"{uuid4().hex}{suffix}"
-    destination = PDF_STORAGE_DIR / filename
+    destination = BOOKS_STORAGE_DIR / filename
 
     file_bytes = await pdf_file.read()
     destination.write_bytes(file_bytes)
 
-    # 4. Update Database Fields
-    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
-    
+    source_url = build_public_file_url(str(request.base_url), "books", filename)
+
+    book.source_type = "pdf"
     book.source_url = source_url
     book.source_path = str(destination)
     book.mime_type = "application/pdf"
+    book.content_text = None
 
+    db.add(book)
     db.commit()
     db.refresh(book)
 
