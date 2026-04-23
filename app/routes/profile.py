@@ -4,6 +4,8 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
+from datetime import datetime, timedelta, timezone
+from app.schemas.profile import SidebarSummaryRead
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -91,6 +93,25 @@ def build_profile_response(user: User, library_rows: list[LibraryItem]) -> UserP
         ],
     )
 
+def calculate_reading_streak_days(library_rows: list[LibraryItem]) -> int:
+    read_dates = {
+        row.last_read_at.astimezone(timezone.utc).date()
+        for row in library_rows
+        if row.last_read_at is not None
+    }
+
+    if not read_dates:
+        return 0
+
+    today = datetime.now(timezone.utc).date()
+    streak = 0
+    current = today
+
+    while current in read_dates:
+        streak += 1
+        current = current - timedelta(days=1)
+
+    return streak
 
 @router.get("/", response_model=UserProfileRead)
 def get_profile(
@@ -160,3 +181,17 @@ async def upload_avatar(
 
     library_rows = load_library_rows(db, current_user.id)
     return build_profile_response(current_user, library_rows)
+
+@router.get("/sidebar-summary", response_model=SidebarSummaryRead)
+def get_sidebar_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SidebarSummaryRead:
+    library_rows = load_library_rows(db, current_user.id)
+    streak = calculate_reading_streak_days(library_rows)
+
+    return SidebarSummaryRead(
+        full_name=current_user.full_name,
+        avatar_url=current_user.avatar_url,
+        reading_streak_days=streak,
+    )

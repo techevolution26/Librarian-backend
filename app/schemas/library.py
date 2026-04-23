@@ -46,3 +46,14 @@ class LibrarySummary(BaseModel):
     saved: int
     finished: int
     average_rating: float
+
+
+class SelectableLibraryBookRead(BaseModel):
+    id: int
+    status: str
+    progress: int
+    current_page: int | None = None
+    bookmark_page: int | None = None
+    book: BookRead
+
+    model_config = ConfigDict(from_attributes=True)

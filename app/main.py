@@ -4,7 +4,8 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.storage import STORAGE_ROOT, ensure_storage_dirs
-from app.routes import auth, books, library, profile, settings as settings_route
+from app.routes import auth, books, library, profile, settings as settings_route, connections, circles
+from app.core.database import Base, engine
 
 settings = get_settings()
 
@@ -31,6 +32,12 @@ app.include_router(books.router)
 app.include_router(library.router)
 app.include_router(profile.router)
 app.include_router(settings_route.router)
+app.include_router(connections.router)
+app.include_router(circles.router)
+
+@app.on_event("startup")
+def startup():
+    Base.metadata.create_all(bind=engine)
 
 
 @app.get("/")

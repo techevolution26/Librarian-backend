@@ -15,8 +15,12 @@ from app.schemas.library import (
     LibraryMutationCreate,
     LibrarySummary,
     PdfProgressUpdate,
+    SelectableLibraryBookRead,
     StartReadingPayload,
 )
+
+from app.schemas.book import BookRead
+from pydantic import BaseModel, ConfigDict
 
 router = APIRouter(prefix="/library", tags=["library"])
 
@@ -49,20 +53,6 @@ def to_library_item_read(row: LibraryItem) -> LibraryItemRead:
     )
 
 
-@router.get("/", response_model=list[LibraryItemRead])
-def list_library_items(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> list[LibraryItemRead]:
-    rows = db.scalars(
-        select(LibraryItem)
-        .where(LibraryItem.user_id == current_user.id)
-        .options(joinedload(LibraryItem.book))
-        .order_by(LibraryItem.updated_at.desc(), LibraryItem.id.desc())
-    ).all()
-
-    return [to_library_item_read(row) for row in rows]
-
 
 @router.get("/summary", response_model=LibrarySummary)
 def get_library_summary(
@@ -93,6 +83,56 @@ def get_library_summary(
         finished=finished_count,
         average_rating=average_rating,
     )
+
+
+@router.get("/selectable-books", response_model=list[SelectableLibraryBookRead])
+def list_selectable_books(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[SelectableLibraryBookRead]:
+    rows = db.scalars(
+        select(LibraryItem)
+        .where(LibraryItem.user_id == current_user.id)
+        .options(joinedload(LibraryItem.book))
+        .order_by(LibraryItem.updated_at.desc())
+    ).all()
+
+    return [SelectableLibraryBookRead.model_validate(row) for row in rows]
+
+@router.get("/", response_model=list[LibraryItemRead])
+def list_library_items(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[LibraryItemRead]:
+    rows = db.scalars(
+        select(LibraryItem)
+        .where(LibraryItem.user_id == current_user.id)
+        .options(joinedload(LibraryItem.book))
+        .order_by(LibraryItem.updated_at.desc(), LibraryItem.id.desc())
+    ).all()
+
+    return [to_library_item_read(row) for row in rows]
+
+
+@router.get("/{book_id}", response_model=LibraryItemRead)
+def get_library_item_for_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> LibraryItemRead:
+    item = db.scalar(
+        select(LibraryItem)
+        .where(
+            LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == book_id,
+        )
+        .options(joinedload(LibraryItem.book))
+    )
+
+    if not item:
+        raise HTTPException(status_code=404, detail="Library item not found")
+
+    return to_library_item_read(item)
 
 
 @router.post("/", response_model=LibraryItemRead, status_code=201)
@@ -226,22 +266,3 @@ def save_pdf_progress(
     return to_library_item_read(item)
 
 
-@router.get("/{book_id}", response_model=LibraryItemRead)
-def get_library_item_for_book(
-    book_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> LibraryItemRead:
-    item = db.scalar(
-        select(LibraryItem)
-        .where(
-            LibraryItem.user_id == current_user.id,
-            LibraryItem.book_id == book_id,
-        )
-        .options(joinedload(LibraryItem.book))
-    )
-
-    if not item:
-        raise HTTPException(status_code=404, detail="Library item not found")
-
-    return to_library_item_read(item)
