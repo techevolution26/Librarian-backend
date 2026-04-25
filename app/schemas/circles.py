@@ -82,6 +82,20 @@ class CircleBookCreate(BaseModel):
     target_end_date: date | None = None
 
 
+class CircleProgressBookRead(BaseModel):
+    id: int
+    title: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CircleProgressCircleBookRead(BaseModel):
+    id: int
+    book: CircleProgressBookRead
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class CircleProgressUpdateRead(BaseModel):
     id: int
     progress_percent: int
@@ -91,6 +105,7 @@ class CircleProgressUpdateRead(BaseModel):
     visibility: str
     created_at: datetime
     user: CircleMemberUserRead
+    circle_book: CircleProgressCircleBookRead | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

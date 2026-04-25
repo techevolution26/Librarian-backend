@@ -1,8 +1,10 @@
+from datetime import datetime, timezone
 from re import sub
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_, or_, select
 
 from app.core.database import get_db
 from app.core.security import get_current_user
@@ -11,7 +13,9 @@ from app.models.circle import Circle
 from app.models.circle_book import CircleBook
 from app.models.circle_member import CircleMember
 from app.models.circle_progress_update import CircleProgressUpdate
+from app.schemas.circles import CircleInviteCreate, CircleMemberRead
 from app.models.user import User
+from app.models.user_connection import UserConnection
 from app.schemas.book import BookRead
 from app.schemas.circles import (
     CircleBookCreate,
@@ -191,15 +195,41 @@ def invite_circle_member(
         )
     )
     if existing:
-        raise HTTPException(status_code=409, detail="User already invited or in circle")
+        raise HTTPException(
+            status_code=409,
+            detail="User already invited or in circle",
+        )
+
+    accepted_connection = db.scalar(
+        select(UserConnection).where(
+            UserConnection.status == "accepted",
+            or_(
+                and_(
+                    UserConnection.requester_id == current_user.id,
+                    UserConnection.addressee_id == payload.user_id,
+                ),
+                and_(
+                    UserConnection.requester_id == payload.user_id,
+                    UserConnection.addressee_id == current_user.id,
+                ),
+            ),
+        )
+    )
+    if not accepted_connection:
+        raise HTTPException(
+            status_code=403,
+            detail="Only accepted connections can be invited into a circle.",
+        )
 
     row = CircleMember(
         circle_id=circle_id,
         user_id=payload.user_id,
         role="member",
-        status="invited",
+        status="active",
         invited_by_user_id=current_user.id,
+        joined_at=datetime.now(timezone.utc),
     )
+
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -210,7 +240,10 @@ def invite_circle_member(
         .options(joinedload(CircleMember.user))
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Circle member not found after invite")
+        raise HTTPException(
+            status_code=404,
+            detail="Circle member not found after invite",
+        )
 
     return CircleMemberRead.model_validate(result)
 
@@ -370,10 +403,13 @@ def list_progress_updates(
     require_circle_member(db, circle_id, current_user.id)
 
     rows = db.scalars(
-        select(CircleProgressUpdate)
-        .where(CircleProgressUpdate.circle_id == circle_id)
-        .options(joinedload(CircleProgressUpdate.user))
-        .order_by(CircleProgressUpdate.created_at.desc())
+    select(CircleProgressUpdate)
+    .where(CircleProgressUpdate.circle_id == circle_id)
+    .options(
+        joinedload(CircleProgressUpdate.user),
+        joinedload(CircleProgressUpdate.circle_book).joinedload(CircleBook.book),
+    )
+    .order_by(CircleProgressUpdate.created_at.desc())
     ).all()
 
     return [CircleProgressUpdateRead.model_validate(row) for row in rows]
