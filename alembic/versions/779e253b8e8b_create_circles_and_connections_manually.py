@@ -5,7 +5,7 @@ from typing import Sequence, Union
 from alembic import op
 import sqlalchemy as sa
 
-revision: str = "manual_circles_connections"
+revision: str = "779e253b8e8b"
 down_revision: Union[str, Sequence[str], None] = "69e27d982aa9"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

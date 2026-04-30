@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 ThemeOption = Literal["system", "light", "dark"]
 DensityOption = Literal["comfortable", "compact"]
@@ -61,5 +61,25 @@ class UserSettingsUpdate(BaseModel):
     product_announcements: bool | None = None
     profile_visibility: VisibilityOption | None = None
     share_reading_activity: bool | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class OnboardingPreferencesRead(BaseModel):
+    preferred_genres: list[str] = Field(default_factory=list)
+    reading_goals: list[str] = Field(default_factory=list)
+    content_styles: list[str] = Field(default_factory=list)
+    preferred_lengths: list[str] = Field(default_factory=list)
+    weekly_target: str | None = None
+    onboarding_completed: bool = False
+
+
+class OnboardingPreferencesUpdate(BaseModel):
+    preferred_genres: list[str] = Field(default_factory=list)
+    reading_goals: list[str] = Field(default_factory=list)
+    content_styles: list[str] = Field(default_factory=list)
+    preferred_lengths: list[str] = Field(default_factory=list)
+    weekly_target: str | None = None
+    onboarding_completed: bool = True
 
     model_config = ConfigDict(extra="forbid")

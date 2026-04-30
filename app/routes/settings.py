@@ -1,10 +1,12 @@
+from sqlalchemy import select
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.settings import UserSettingsRead, UserSettingsUpdate
+from app.schemas.settings import OnboardingPreferencesRead, OnboardingPreferencesUpdate, UserSettingsRead, UserSettingsUpdate
 from app.models.user_settings import UserSettings
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -63,7 +65,14 @@ def ensure_user_settings(db: Session, user: User) -> UserSettings:
         product_announcements=False,
         profile_visibility="private",
         share_reading_activity=False,
+        preferred_genres=[],
+        reading_goals=[],
+        content_styles=[],
+        preferred_lengths=[],
+        weekly_target=None,
+        onboarding_completed=False,
     )
+
     db.add(settings)
     db.commit()
     db.refresh(settings)
@@ -131,3 +140,48 @@ def update_settings(
     db.refresh(current_user)
 
     return build_settings_response(current_user)
+
+@router.get("/onboarding", response_model=OnboardingPreferencesRead)
+def get_onboarding_preferences(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OnboardingPreferencesRead:
+    settings = ensure_user_settings(db, current_user)
+
+    return OnboardingPreferencesRead(
+        preferred_genres=settings.preferred_genres or [],
+        reading_goals=settings.reading_goals or [],
+        content_styles=settings.content_styles or [],
+        preferred_lengths=settings.preferred_lengths or [],
+        weekly_target=settings.weekly_target,
+        onboarding_completed=settings.onboarding_completed,
+    )
+
+
+@router.patch("/onboarding", response_model=OnboardingPreferencesRead)
+def update_onboarding_preferences(
+    payload: OnboardingPreferencesUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> OnboardingPreferencesRead:
+    settings = ensure_user_settings(db, current_user)
+
+    settings.preferred_genres = payload.preferred_genres
+    settings.reading_goals = payload.reading_goals
+    settings.content_styles = payload.content_styles
+    settings.preferred_lengths = payload.preferred_lengths
+    settings.weekly_target = payload.weekly_target
+    settings.onboarding_completed = payload.onboarding_completed
+
+    db.add(settings)
+    db.commit()
+    db.refresh(settings)
+
+    return OnboardingPreferencesRead(
+        preferred_genres=settings.preferred_genres or [],
+        reading_goals=settings.reading_goals or [],
+        content_styles=settings.content_styles or [],
+        preferred_lengths=settings.preferred_lengths or [],
+        weekly_target=settings.weekly_target,
+        onboarding_completed=settings.onboarding_completed,
+    )
