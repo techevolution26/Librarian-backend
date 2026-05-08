@@ -1,12 +1,8 @@
-from datetime import datetime, timezone
-from app.core.security import hash_password
-
-from sqlalchemy import null, text
+from sqlalchemy import select, text , null
 from sqlalchemy.orm import Session
 
-
-from app.core.database import Base, SessionLocal, engine
-from app.models import Book, LibraryItem, User, UserSettings
+from app.core.database import SessionLocal
+from app.models import Book
 
 BOOK_SEED = [
   {
@@ -1130,107 +1126,659 @@ BOOK_SEED = [
         "mime_type": "application/pdf",
         "source_url": null,
         "source_path": null
-      }
+      },
 
+      # university catalogues
+      {
+        "title": "Shaping The College Curriculum: Academic Plans 2nd Edition",
+        "author": "Lisa R. Lattuca and Joan S. Stark",
+        "cover": "/shapingcollegecurriculum2nd.jpg",
+        "description": "A sample: A collection of academic plans from the University of Chicago between 1892 and 1945, showcasing the evolution of higher education curriculum design.",
+        "rating": 4.5,
+        "pages": 30,
+        "genre": ["Education", "History"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "University Teaching in Focus",
+        "author": "Edited by Lynne Hunt and Denise Chalmers",
+        "cover": "/universityteachingfocus.jpg",
+        "description": "A sample: The second edition of University Teaching in Focus distils the knowledge and insights,of internationally acclaimed experts in university teaching. It empowers university teachers and contributes to their career success by developing their teaching skills, strategies and knowledge..",
+        "rating": 4.3,
+        "pages": 38,
+        "genre": ["Education", "Pedagogy"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "General Education Essentials: A Guide for College Faculty",
+        "author": "Paul Hanstedt",
+        "cover": "/generaleducationessentials.jpg",
+        "description": "A sample: A comprehensive guide to general education principles and practices for college faculty.",
+        "rating": 4.2,
+        "pages": 28,
+        "genre": ["Education", "Pedagogy"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Business Accounting",
+        "author": "Joe Ben Hoyle, University of Richmond,C. J. Skender, University of North Carolina at Chapel Hill",
+        "cover": "/businessaccounting.webp",
+        "description": "A sample: A comprehensive guide to business accounting principles and practices.",
+        "rating": 4.3,
+        "pages": 1108,
+        "genre": ["Business", "Accounting"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Marketing Management",
+        "author": "Maharshi Dayanand University",
+        "cover": "/marketingmanagement.jpg",
+        "description": "A sample: A comprehensive guide to marketing management principles and practices.",
+        "rating": 4.4,
+        "pages": 487,
+        "genre": ["Business", "Marketing"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Marketcing Management 14",
+        "author": "Philip Kotler, Northwestern University, Kevin Lane Keller, Dartmouth College",
+        "cover": "/marketingmanagement14.jpg",
+        "description": "A comprehensive guide to marketing management principles and practices.",
+        "rating": 4.5,
+        "pages": 812,
+        "genre": ["Business", "Marketing"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Principles of Management",
+        "author": "Rice University",
+        "cover": "/principlesofmanagement.webp",
+        "description": "A comprehensive guide to principles of management for business students.",
+        "rating": 4.3,
+        "pages": 673,
+        "genre": ["Business", "Management"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Economics",
+        "author": "Unknown",
+        "cover": "/economics.jpg",
+        "description": "A comprehensive guide to economics principles and practices.",
+        "rating": 4.2,
+        "pages": 110,
+        "genre": ["Business", "Economics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Essential of Business Law 10th edition",
+        "author": "Anthony L. Liuzzo, J.D., Ph.D.Wilkes University Mesa, Arizona, Ruth C. Hughes, J.D. ,Wilkes University Wilkes-Barre, Pennsylvania",
+        "cover": "/essentialofbusinesslaw10thedition.jpeg",
+        "description": "A comprehensive guide to business law principles and practices,.",
+        "rating": 4.3,
+        "pages": 824,
+        "genre": ["Business", "Law"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Chemistry: The Central Science 12th edition",
+        "author": "Theodore L. Brown University of Illinois at Urbana-ChampaignH. Eugene LEMay, Jr. University of Nevada, RenoBruce E. Bursten University of Tennessee, KnoxvilleCatherine J. Murphy ,University of Illinois at Urbana-Champaign,Patrick M. Woodward The Ohio State University",
+        "cover": "/chemistryscience12thed.webp",
+        "description": "A comprehensive guide to chemistry principles and practices.",
+        "rating": 4.4,
+        "pages": 1195,
+        "genre": ["Science", "Chemistry"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "University Physics Volume 1",
+        "author": "Samuel J. Ling, University of Oregon, Jeff Sanny, University of Oregon, William Moebs, University of Oregon",
+        "cover": "/universityphysics.jpg",
+        "description": "A comprehensive guide to university physics principles and practices.",
+        "rating": 4.5,
+        "pages": 998,
+        "genre": ["Science", "Physics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Biology",
+        "author": "Raven Johnson",
+        "cover": "/Biology-6th-ed-raven-johnson-1-320.webp",
+        "description": "A comprehensive guide to biology principles and practices.",
+        "rating": 4.4,
+        "pages": 1239,
+        "genre": ["Science", "Biology"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Higher Engineering Mathematics 6th edition",
+        "author": "John Bird, B.S. Grewal",
+        "cover": "/higherengineeringmathematics.jpg",
+        "description": "A comprehensive guide to higher engineering mathematics principles and practices.",
+        "rating": 4.3,
+        "pages": 705,
+        "genre": ["Engineering", "Mathematics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "A Textbook of Electrical Technology Volume 1",
+        "author": "B.L. Theraja, A.K. Theraja",
+        "cover": "/electricaltechnology.png",
+        "description": "A comprehensive guide to electrical technology principles and practices.",
+        "rating": 4.2,
+        "pages": 2744,
+        "genre": ["Engineering", "Electrical"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Engineering Mechanics: Statics",
+        "author": "R.C. Hibbeler",
+        "cover": "/engineeringmechanicsstatic.jpg",
+        "description": "A comprehensive guide to engineering mechanics principles and practices.",
+        "rating": 4.3,
+        "pages": 655,
+        "genre": ["Engineering", "Mechanics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title":"Newnes Workshop Engineers pocket book",
+        "author": "Roger Timings",
+        "cover": "/newnesworkshopengineerspocketbook.jpg",
+        "description": "A comprehensive guide to workshop engineering principles and practices.",
+        "rating": 4.1,
+        "pages": 315,
+        "genre": ["Engineering", "Workshop"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Fluid Mechanics 4th edition",
+        "author": "Frank M. White, University of Rhode Island",
+        "cover": "/fluidmechanics.jpg",
+        "description": "A comprehensive guide to fluid mechanics principles and practices.",
+        "rating": 4.2,
+        "pages": 1023,
+        "genre": ["Engineering", "Fluid Mechanics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Doing Qualitative Research 5th edition",
+        "author": "David Silverman",
+        "cover": "/doingqualitativeresearch.jpg",
+        "description": "A comprehensive guide to qualitative research principles and practices.",
+        "rating": 4.3,
+        "pages": 931,
+        "genre": ["Research", "Qualitative"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Everythings an Argument with Readings:Instructors Notes 4th edition",
+        "author": "Andrea Lunsford, Robert E. Scott",
+        "cover": "/everythingsanargument.jpg",
+        "description": "A comprehensive guide to argumentation principles and practices.",
+        "rating": 4.2,
+        "pages": 251,
+        "genre": ["Communication", "Argumentation"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "The Penguin Dictionary OF International Relations",
+        "author": "Graham Evans and Jeffrey Neumham",
+        "cover": "/penguindictionaryofinternationalrelations.jpg",
+        "description": "A comprehensive guide to international relations principles and practices.",
+        "rating": 4.1,
+        "pages": 644,
+        "genre": ["Politics", "International Relations"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Socialogy 5th edition",
+        "author": "Anthony Giddens, Mitchell Duneier, Richard P. Appelbaum, Deborah Carr",
+        "cover": "/sociology.jpg",
+        "description": "A comprehensive guide to sociology principles and practices.",
+        "rating": 4.2,
+        "pages": 1121,
+        "genre": ["Sociology"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Operating System Concepts 8th edition",
+        "author": "Abraham Silberschatz, Peter B. Galvin, Greg Gagne",
+        "cover": "/operatingsystemconcepts.jpg",
+        "description": "A comprehensive guide to operating system concepts and practices.",
+        "rating": 4.4,
+        "pages": 976,
+        "genre": ["Technology", "Operating Systems"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Operating System Concepts 8th edition",
+        "author": "Abraham Silberschatz, Peter B. Galvin, Greg Gagne",
+        "cover": "/operatingsystemconcepts.jpg",
+        "description": "A comprehensive guide to operating system concepts and practices.",
+        "rating": 4.4,
+        "pages": 976,
+        "genre": ["Technology", "Operating Systems"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Data Communications & Networking 4th Edition",
+        "author": "Behrouz A. Forouzan,DeAnza College, Sophia Chung Fegan",
+        "cover": "/datacommunicationsandnetworking.jpg",
+        "description": "A comprehensive guide to data communications and networking principles and practices.",
+        "rating": 4.3,
+        "pages": 1171,
+        "genre": ["Technology", "Networking"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Data Communications & Networking 5th Edition",
+        "author": "Behrouz A. Forouzan,DeAnza College, Sophia Chung Fegan",
+        "cover": "/datacommunicationsandnetworking.jpg",
+        "description": "A comprehensive guide to data communications and networking principles and practices.",
+        "rating": 4.3,
+        "pages": 1269,
+        "genre": ["Technology", "Networking"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Java How To Program GUI 9th Edition",
+        "author": "Paul Deitel, Harvey Deitel",
+        "cover": "/javahowtoprogram.jpg",
+        "description": "A comprehensive guide to Java programming principles and practices.",
+        "rating": 4.4,
+        "pages": 1535,
+        "genre": ["Technology", "Programming"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Java How To Program GUI 4th Edition",
+        "author": "Paul Deitel, Harvey Deitel",
+        "cover": "/javahowtoprogram.jpg",
+        "description": "A comprehensive guide to Java programming principles and practices.",
+        "rating": 4.4,
+        "pages": 1530,
+        "genre": ["Technology", "Programming"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Java How To Program 10th Edition",
+        "author": "Paul Deitel, Harvey Deitel",
+        "cover": "/javahowtoprogram10thed.jpg",
+        "description": "A comprehensive guide to Java programming principles and practices.",
+        "rating": 4.4,
+        "pages": 1245,
+        "genre": ["Technology", "Programming"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Database System Concepts 7th Edition",
+        "author": "Abraham Silberschatz, Henry F. Korth, S. Sudarshan",
+        "cover": "/databasesystemconcepts.jpg",
+        "description": "A comprehensive guide to database system concepts and practices.",
+        "rating": 4.5,
+        "pages": 1373,
+        "genre": ["Technology", "Databases"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Introduction to Philosophy",
+        "author": "Paul J. Glenn",
+        "cover": "/introductiontophilosophy.jpg",
+        "description": "A comprehensive guide to philosophy principles and practices,Paul J. Glenn ,Ph.D., S.T.D.Professor of Philosophy in the C ollege of St. Charles Borromeo,Columbus, Ohio.",
+        "rating": 4.3,
+        "pages": 418,
+        "genre": ["Philosophy"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "A short textbook of a Psychiatry 7th edition",
+        "author": "Niraj Ahuja",
+        "cover": "/shorttextbookofpsychiatry7thed.jpg",
+        "description": "A comprehensive guide to psychiatry principles and practices.",
+        "rating": 4.2,
+        "pages": 273,
+        "genre": ["Medicine", "Psychiatry"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Semantics",
+        "author": "John I. Saeed",
+        "cover": "/semantics.jpg",
+        "description": "A comprehensive guide to semantics principles and practices.",
+        "rating": 4.3,
+        "pages": 437,
+        "genre": ["Linguistics", "Semantics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title":" Thomas Culculas 13th edition",
+        "author": "George B. Thomas, Jr., Maurice D. Weir, Joel Hass",
+        "cover": "/thomascalculus.jpg",
+        "description": "A comprehensive guide to calculus principles and practices.",
+        "rating": 4.4,
+        "pages": 1205,
+        "genre": ["Mathematics", "Calculus"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Linear Algebra and Its Applications 5th edition",
+        "author": "David C. Lay, Steven R. Lay, Judi J. McDonald",
+        "cover": "/linealgebra5thed.jpg",
+        "description": "A comprehensive guide to linear algebra principles and practices.",
+        "rating": 4.3,
+        "pages": 579,
+        "genre": ["Mathematics", "Linear Algebra"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Linear Algebra and Its Applications 4th edition",
+        "author": "Gilbert Strang",
+        "cover": "/linealgebra4thed.webp",
+        "description": "A comprehensive guide to linear algebra principles and practices.",
+        "rating": 4.3,
+        "pages": 545,
+        "genre": ["Mathematics", "Linear Algebra"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title":" An Introduction to Statistical Methods and Data Analysis 7th edition",
+        "author": "R. Lyman Ott, Michael Longnecker",
+        "cover": "/introductiontostatisticalmethods7th.webp",
+        "description": "A comprehensive guide to statistical methods and data analysis.",
+        "rating": 4.2,
+        "pages": 1192,
+        "genre": ["Mathematics", "Statistics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "An Introduction to Statistical Methods and Data Analysis 6th edition",
+        "author": "R. Lyman Ott, Michael Longnecker",
+        "cover": "/introductiontostatisticalmethods6th.jpg",
+        "description": "A comprehensive guide to statistical methods and data analysis.",
+        "rating": 4.2,
+        "pages": 1297,
+        "genre": ["Mathematics", "Statistics"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Elementary Differential Equations and Boundary Value Problems 7th edition",
+        "author": "William E. Boyce, Richard C. DiPrima",
+        "cover": "/elementarydifferentialequations7thed.jpg",
+        "description": "A comprehensive guide to elementary differential equations and boundary value problems.",
+        "rating": 4.3,
+        "pages": 761,
+        "genre": ["Mathematics", "Differential Equations"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Elementary Differential Equations and Boundary Value Problems 11th edition",
+        "author": "William E. Boyce, Richard C. DiPrima",
+        "cover": "/elementarydifferentialequations11thed.webp",
+        "description": "A comprehensive guide to elementary differential equations and boundary value problems.",
+        "rating": 4.3,
+        "pages": 1120,
+        "genre": ["Mathematics", "Differential Equations"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      },
+      {
+        "title": "Elementary Differential Equations and Boundary Value Problems 8th edition",
+        "author": "William E. Boyce, Richard C. DiPrima",
+        "cover": "/elementarydifferentialequations8thed.jpg",
+        "description": "A comprehensive guide to elementary differential equations and boundary value problems.",
+        "rating": 4.3,
+        "pages": 806,
+        "genre": ["Mathematics", "Differential Equations"],
+        "source_type": "pdf",
+        "content_text": "Sample content...",
+        "mime_type": "application/pdf",
+        "source_url": null,
+        "source_path": null
+      }
 ]
 
+def find_existing_book(db: Session, item: dict) -> Book | None:
+    """
+    Find an existing book.
 
-def reset_schema() -> None:
-    Base.metadata.drop_all(bind=engine)
-    Base.metadata.create_all(bind=engine)
+    Priority:
+    1. Match by source_url if the book has a source_url.
+    2. Otherwise match by title + author.
+    """
+
+    source_url = item.get("source_url")
+
+    if source_url:
+        return db.execute(
+            select(Book).where(Book.source_url == source_url)
+        ).scalar_one_or_none()
+
+    return db.execute(
+        select(Book).where(
+            Book.title == item["title"],
+            Book.author == item["author"],
+        )
+    ).scalar_one_or_none()
+
+
+def apply_book_seed_data(book: Book, item: dict) -> None:
+    """
+    Apply seed data to a Book model.
+
+    This works for both new books and existing books.
+    """
+
+    book.title = item["title"]
+    book.author = item["author"]
+    book.cover = item["cover"]
+    book.description = item["description"]
+    book.rating = item["rating"]
+    book.pages = item["pages"]
+
+    book.source_type = item.get("source_type")
+    book.content_text = item.get("content_text")
+    book.mime_type = item.get("mime_type")
+    book.source_url = item.get("source_url")
+    book.source_path = item.get("source_path")
+
+    book.genres = item.get("genre", [])
 
 
 def seed() -> None:
+    """
+    Seed only books.
+
+    This does not drop tables.
+    This does not recreate the database.
+    This does not recreate users.
+    Existing books are updated.
+    New books are inserted.
+    """
+
+    created_count = 0
+    updated_count = 0
+
     with SessionLocal() as db:
         db: Session
 
-        user = User(
-    full_name="The Librarian",
-    email="techresolute401@gmail.com",
-    password_hash=hash_password("amazingGrace26"),
-    plan="free",
-    avatar_url=None,
-    is_active=True,
-)
-        db.add(user)
-        db.flush()
-
-        settings = UserSettings(
-            user_id=user.id,
-            theme="dark",
-            density="comfortable",
-            reading_mode="scroll",
-            font_size="medium",
-            line_height="comfortable",
-            auto_bookmark=True,
-            show_progress_bar=True,
-            email_updates=True,
-            reading_reminders=True,
-            product_announcements=False,
-            profile_visibility="private",
-            share_reading_activity=False,
-        )
-        db.add(settings)
-
-        books: list[Book] = []
         for item in BOOK_SEED:
-            book = Book(
-                title=item["title"],
-                author=item["author"],
-                cover=item["cover"],
-                description=item["description"],
-                rating=item["rating"],
-                pages=item["pages"],
-                source_type=item.get("source_type"),
-                content_text=item.get("content_text"),
-                mime_type=item.get("mime_type"),
-                source_url=item.get("source_url"),
-                source_path=item.get("source_path"),
-            )
-            book.genres = item["genre"]
-            db.add(book)
-            books.append(book)
+            book = find_existing_book(db, item)
 
-        db.flush()
+            if book is None:
+                book = Book()
+                apply_book_seed_data(book, item)
+                db.add(book)
+                created_count += 1
+            else:
+                apply_book_seed_data(book, item)
+                updated_count += 1
 
-        # library_items = [
-        #     LibraryItem(
-        #         user_id=user.id,
-        #         book_id=books[0].id,
-        #         status="reading",
-        #         progress=78,
-        #     ),
-        #     LibraryItem(
-        #         user_id=user.id,
-        #         book_id=books[1].id,
-        #         status="reading",
-        #         progress=42,
-        #     ),
-        #     LibraryItem(
-        #         user_id=user.id,
-        #         book_id=books[2].id,
-        #         status="saved",
-        #         progress=0,
-        #     ),
-        #     LibraryItem(
-        #         user_id=user.id,
-        #         book_id=books[3].id,
-        #         status="finished",
-        #         progress=100,
-        #         finished_at=datetime.now(timezone.utc),
-        #     ),
-        # ]
-        # db.add_all(library_items)
         db.commit()
 
-        result = db.execute(text("SELECT COUNT(*) AS count FROM books"))
-        books_count = result.scalar_one()
+        books_count = db.execute(
+            text("SELECT COUNT(*) AS count FROM books")
+        ).scalar_one()
 
-        print(" Database connection confirmed")
-        print(f" Seed complete: {books_count} books inserted")
-        # print(f" User inserted: {user.email}")
+        print("Database connection confirmed")
+        print("Seed complete")
+        print(f"Created books: {created_count}")
+        print(f"Updated books: {updated_count}")
+        print(f"Total books in database: {books_count}")
 
 
 if __name__ == "__main__":
-    reset_schema()
     seed()
