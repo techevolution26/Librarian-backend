@@ -49,3 +49,4 @@ class SidebarSummaryRead(BaseModel):
     full_name: str
     avatar_url: str | None = None
     reading_streak_days: int
+    role: str = "USER"

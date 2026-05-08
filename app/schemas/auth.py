@@ -21,6 +21,7 @@ class AuthUserRead(BaseModel):
     id: int
     full_name: str
     email: EmailStr
+    role: str
     plan: str
     avatar_url: str | None = None
 

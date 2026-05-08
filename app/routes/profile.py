@@ -333,4 +333,5 @@ def get_sidebar_summary(
         full_name=current_user.full_name,
         avatar_url=current_user.avatar_url,
         reading_streak_days=streak,
+        role=getattr(current_user, "role", "USER"),
     )

@@ -1257,9 +1257,9 @@ BOOK_SEED = [
       },
       {
         "title": "Chemistry: The Central Science 12th edition",
-        "author": "Theodore L. Brown University of Illinois at Urbana-ChampaignH. Eugene LEMay, Jr. University of Nevada, RenoBruce E. Bursten University of Tennessee, KnoxvilleCatherine J. Murphy ,University of Illinois at Urbana-Champaign,Patrick M. Woodward The Ohio State University",
+        "author": "Theodore L. Brown University, Eugene LEMay, RenoBruce E. Bursten, KnoxvilleCatherine J. Murphy,Patrick M. Woodward",
         "cover": "/chemistryscience12thed.webp",
-        "description": "A comprehensive guide to chemistry principles and practices.",
+        "description": "A comprehensive guide to chemistry principles and practices,Theodore L. Brown University of Illinois at Urbana-ChampaignH. Eugene LEMay, Jr. University of Nevada, RenoBruce E. Bursten University of Tennessee, KnoxvilleCatherine J. Murphy ,University of Illinois at Urbana-Champaign,Patrick M. Woodward The Ohio State University.",
         "rating": 4.4,
         "pages": 1195,
         "genre": ["Science", "Chemistry"],

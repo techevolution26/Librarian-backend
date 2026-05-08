@@ -10,6 +10,9 @@ from app.core.database import get_db
 from app.core.storage import BOOKS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
 from app.models.book import Book
 from app.schemas.book import BookContentRead, BookRead
+from app.models.user import User
+from app.core.authz import require_admin_user
+from app.core.security import get_current_user
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -227,7 +230,10 @@ async def upload_pdf_book(
     genre_csv: str = Form(""),
     pdf_file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> BookRead:
+    require_admin_user(current_user)
+
     if pdf_file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
@@ -236,9 +242,14 @@ async def upload_pdf_book(
     destination = BOOKS_STORAGE_DIR / filename
 
     file_bytes = await pdf_file.read()
+
+    max_pdf_size = 25 * 1024 * 1024
+    if len(file_bytes) > max_pdf_size:
+        raise HTTPException(status_code=413, detail="PDF file is too large")
+
     destination.write_bytes(file_bytes)
 
-    source_url = build_public_file_url(str(request.base_url), "books", filename)
+    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
 
     book = Book(
         title=title,
@@ -268,7 +279,10 @@ async def update_book_pdf_only(
     book_id: int,
     pdf_file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ) -> BookRead:
+    require_admin_user(current_user)
+
     if pdf_file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
@@ -287,17 +301,60 @@ async def update_book_pdf_only(
     destination = BOOKS_STORAGE_DIR / filename
 
     file_bytes = await pdf_file.read()
+
+    max_pdf_size = 25 * 1024 * 1024
+    if len(file_bytes) > max_pdf_size:
+        raise HTTPException(status_code=413, detail="PDF file is too large")
+
     destination.write_bytes(file_bytes)
 
-    source_url = build_public_file_url(str(request.base_url), "books", filename)
+    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
 
     book.source_type = "pdf"
     book.source_url = source_url
     book.source_path = str(destination)
     book.mime_type = "application/pdf"
-    book.content_text = None
 
-    db.add(book)
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+@router.patch("/{book_id}", response_model=BookRead)
+def update_book_metadata(
+    book_id: int,
+    title: str | None = Form(None),
+    author: str | None = Form(None),
+    cover: str | None = Form(None),
+    description: str | None = Form(None),
+    rating: float | None = Form(None),
+    pages: int | None = Form(None),
+    genre_csv: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if title is not None:
+        book.title = title
+    if author is not None:
+        book.author = author
+    if cover is not None:
+        book.cover = cover
+    if description is not None:
+        book.description = description
+    if rating is not None:
+        book.rating = rating
+    if pages is not None:
+        book.pages = pages
+    if genre_csv is not None:
+        book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
+
     db.commit()
     db.refresh(book)
 
