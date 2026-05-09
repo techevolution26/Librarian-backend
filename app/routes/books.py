@@ -49,13 +49,68 @@ def public_books_stmt():
     )
 
 
-@router.get("/", response_model=list[BookRead])
-def list_books(db: Session = Depends(get_db)) -> list[BookRead]:
+
+@router.get("/admin/list", response_model=list[BookRead])
+def admin_list_books(
+    include_archived: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[BookRead]:
+    require_admin_user(current_user)
+
+    stmt = select(Book).order_by(Book.id.desc())
+
+    if not include_archived:
+        stmt = stmt.where(Book.archived_at.is_(None))
+
+    rows = db.scalars(stmt).all()
+    return [to_book_read(row) for row in rows]
+
+
+@router.get("/admin/activity")
+def list_admin_activity(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin_user(current_user)
+
     rows = db.scalars(
-        public_books_stmt().order_by(Book.id.desc())
+        select(AdminActivityLog)
+        .order_by(AdminActivityLog.created_at.desc(), AdminActivityLog.id.desc())
+        .limit(limit)
     ).all()
 
-    return [to_book_read(row) for row in rows]
+    return [
+        {
+            "id": row.id,
+            "admin_user_id": row.admin_user_id,
+            "action": row.action,
+            "entity_type": row.entity_type,
+            "entity_id": row.entity_id,
+            "metadata": row.metadata_json,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]
+
+
+
+@router.get("/admin/{book_id}", response_model=BookRead)
+def admin_get_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    row = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return to_book_read(row)
+
 
 
 @router.get("/featured", response_model=BookRead)
@@ -107,6 +162,129 @@ def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
 
     if not row:
         raise HTTPException(status_code=404, detail="No featured book found")
+
+    return to_book_read(row)
+
+
+@router.get("/trending", response_model=list[BookRead])
+def list_trending_books(
+    limit: int = 12,
+    db: Session = Depends(get_db),
+) -> list[BookRead]:
+    since = datetime.now(timezone.utc) - timedelta(days=14)
+
+    trending_score = (
+        func.count(LibraryItem.id) * 2
+        + func.coalesce(
+            func.sum(
+                case(
+                    (LibraryItem.status == "reading", 5),
+                    (LibraryItem.status == "saved", 3),
+                    (LibraryItem.status == "finished", 4),
+                    else_=1,
+                )
+            ),
+            0,
+        )
+        + func.coalesce(func.avg(Book.rating), 0)
+    ).label("trending_score")
+
+    rows = db.scalars(
+        public_books_stmt()
+        .outerjoin(
+            LibraryItem,
+            (LibraryItem.book_id == Book.id)
+            & (LibraryItem.updated_at >= since),
+        )
+        .group_by(Book.id)
+        .order_by(trending_score.desc(), Book.rating.desc(), Book.id.desc())
+        .limit(limit)
+    ).all()
+
+    return [to_book_read(row) for row in rows]
+
+
+@router.get("/discover", response_model=list[BookRead])
+def discover_books(
+    q: str | None = None,
+    genre: str = "All",
+    sort: str = "recommended",
+    limit: int = Query(default=24, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+) -> list[BookRead]:
+    stmt = public_books_stmt()
+
+    if q:
+        pattern = f"%{q.lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Book.title).like(pattern),
+                func.lower(Book.author).like(pattern),
+                func.lower(Book.description).like(pattern),
+            )
+        )
+
+    rows = db.scalars(stmt).all()
+
+    if genre and genre.lower() != "all":
+        rows = [
+            book
+            for book in rows
+            if any(item.lower() == genre.lower() for item in book.genres)
+        ]
+
+    if sort == "top-rated":
+        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
+    elif sort == "newest":
+        rows.sort(key=lambda book: book.id, reverse=True)
+    elif sort == "featured":
+        rows.sort(
+            key=lambda book: (
+                1 if getattr(book, "is_featured", False) else 0,
+                book.rating or 0,
+                book.id,
+            ),
+            reverse=True,
+        )
+    else:
+        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
+
+    rows = rows[offset : offset + limit]
+
+    return [to_book_read(row) for row in rows]
+
+
+
+@router.get("/genres", response_model=list[str])
+def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
+    rows = db.scalars(select(Book)).all()
+
+    genres: set[str] = set()
+    for book in rows:
+        for genre in book.genres:
+            genres.add(genre)
+
+    return ["All", *sorted(genres)]
+
+
+@router.get("/", response_model=list[BookRead])
+def list_books(db: Session = Depends(get_db)) -> list[BookRead]:
+    rows = db.scalars(
+        public_books_stmt().order_by(Book.id.desc())
+    ).all()
+
+    return [to_book_read(row) for row in rows]
+
+
+@router.get("/{book_id}", response_model=BookRead)
+def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
+    row = db.scalar(
+        public_books_stmt().where(Book.id == book_id)
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Book not found")
 
     return to_book_read(row)
 
@@ -178,111 +356,6 @@ def unset_featured_book(
     return to_book_read(book)
 
 
-@router.get("/trending", response_model=list[BookRead])
-def list_trending_books(
-    limit: int = 12,
-    db: Session = Depends(get_db),
-) -> list[BookRead]:
-    since = datetime.now(timezone.utc) - timedelta(days=14)
-
-    trending_score = (
-        func.count(LibraryItem.id) * 2
-        + func.coalesce(
-            func.sum(
-                case(
-                    (LibraryItem.status == "reading", 5),
-                    (LibraryItem.status == "saved", 3),
-                    (LibraryItem.status == "finished", 4),
-                    else_=1,
-                )
-            ),
-            0,
-        )
-        + func.coalesce(func.avg(Book.rating), 0)
-    ).label("trending_score")
-
-    rows = db.scalars(
-        public_books_stmt()
-        .outerjoin(
-            LibraryItem,
-            (LibraryItem.book_id == Book.id)
-            & (LibraryItem.updated_at >= since),
-        )
-        .group_by(Book.id)
-        .order_by(trending_score.desc(), Book.rating.desc(), Book.id.desc())
-        .limit(limit)
-    ).all()
-
-    return [to_book_read(row) for row in rows]
-
-
-
-@router.get("/genres", response_model=list[str])
-def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
-    rows = db.scalars(select(Book)).all()
-
-    genres: set[str] = set()
-    for book in rows:
-        for genre in book.genres:
-            genres.add(genre)
-
-    return ["All", *sorted(genres)]
-
-
-
-@router.get("/discover", response_model=list[BookRead])
-def discover_books(
-    q: str | None = None,
-    genre: str = "All",
-    sort: str = "recommended",
-    limit: int = Query(default=24, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
-    db: Session = Depends(get_db),
-) -> list[BookRead]:
-    stmt = public_books_stmt()
-
-    if q:
-        pattern = f"%{q.lower()}%"
-        stmt = stmt.where(
-            or_(
-                func.lower(Book.title).like(pattern),
-                func.lower(Book.author).like(pattern),
-                func.lower(Book.description).like(pattern),
-            )
-        )
-
-    rows = db.scalars(stmt).all()
-
-    if genre and genre.lower() != "all":
-        rows = [
-            book
-            for book in rows
-            if any(item.lower() == genre.lower() for item in book.genres)
-        ]
-
-    if sort == "top-rated":
-        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
-    elif sort == "newest":
-        rows.sort(key=lambda book: book.id, reverse=True)
-    elif sort == "featured":
-        rows.sort(
-            key=lambda book: (
-                1 if getattr(book, "is_featured", False) else 0,
-                book.rating or 0,
-                book.id,
-            ),
-            reverse=True,
-        )
-    else:
-        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
-
-    rows = rows[offset : offset + limit]
-
-    return [to_book_read(row) for row in rows]
-
-
-
-
 @router.get("/discover/stats")
 def discover_stats(
     q: str | None = None,
@@ -303,38 +376,6 @@ def discover_stats(
         "new_this_week": min(len(rows), 6),
         "categories": len(categories),
     }
-
-
-
-@router.get("/admin/{book_id}", response_model=BookRead)
-def admin_get_book(
-    book_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> BookRead:
-    require_admin_user(current_user)
-
-    row = db.scalar(select(Book).where(Book.id == book_id))
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    return to_book_read(row)
-
-
-
-@router.get("/{book_id}", response_model=BookRead)
-def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
-    row = db.scalar(
-        public_books_stmt().where(Book.id == book_id)
-    )
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    return to_book_read(row)
-
-
 
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
@@ -510,25 +551,6 @@ def update_book_metadata(
     db.refresh(book)
 
     return to_book_read(book)
-
-@router.get("/admin/list", response_model=list[BookRead])
-def admin_list_books(
-    include_archived: bool = True,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> list[BookRead]:
-    require_admin_user(current_user)
-
-    stmt = select(Book).order_by(Book.id.desc())
-
-    if not include_archived:
-        stmt = stmt.where(Book.archived_at.is_(None))
-
-    rows = db.scalars(stmt).all()
-    return [to_book_read(row) for row in rows]
-
-
-
 
 
 @router.patch("/{book_id}", response_model=BookRead)
@@ -743,32 +765,3 @@ def delete_book(
     )
 
     db.commit()
-
-
-
-@router.get("/admin/activity")
-def list_admin_activity(
-    limit: int = 50,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    require_admin_user(current_user)
-
-    rows = db.scalars(
-        select(AdminActivityLog)
-        .order_by(AdminActivityLog.created_at.desc(), AdminActivityLog.id.desc())
-        .limit(limit)
-    ).all()
-
-    return [
-        {
-            "id": row.id,
-            "admin_user_id": row.admin_user_id,
-            "action": row.action,
-            "entity_type": row.entity_type,
-            "entity_id": row.entity_id,
-            "metadata": row.metadata_json,
-            "created_at": row.created_at,
-        }
-        for row in rows
-    ]
