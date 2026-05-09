@@ -1,4 +1,5 @@
 from pydantic import BaseModel, ConfigDict
+from datetime import datetime
 
 
 class BookRead(BaseModel):
@@ -13,6 +14,10 @@ class BookRead(BaseModel):
     source_type: str
     source_url: str | None = None
     mime_type: str | None = None
+    visibility: str = "published"
+    archived_at: datetime | None = None
+    cover_path: str | None = None
+    is_featured: bool = False
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -7,12 +7,15 @@ from sqlalchemy import select, case, func ,or_
 from sqlalchemy.orm import Session
 from app.models.library_item import LibraryItem
 from app.core.database import get_db
-from app.core.storage import BOOKS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
+from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
 from app.models.book import Book
 from app.schemas.book import BookContentRead, BookRead
 from app.models.user import User
 from app.core.authz import require_admin_user
 from app.core.security import get_current_user
+
+from app.services.admin_activity import log_admin_activity
+from app.models.admin_activity_log import AdminActivityLog
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -20,7 +23,7 @@ ensure_storage_dirs()
 
 
 def to_book_read(row: Book) -> BookRead:
-    
+
     return BookRead(
         id=row.id,
         title=row.title,
@@ -33,17 +36,40 @@ def to_book_read(row: Book) -> BookRead:
         source_type=row.source_type,
         source_url=row.source_url,
         mime_type=row.mime_type,
+        visibility=getattr(row, "visibility", "published"),
+        archived_at=getattr(row, "archived_at", None),
+        is_featured=getattr(row, "is_featured", False),
+    )
+
+def public_books_stmt():
+    return (
+        select(Book)
+        .where(Book.archived_at.is_(None))
+        .where(Book.visibility == "published")
     )
 
 
 @router.get("/", response_model=list[BookRead])
 def list_books(db: Session = Depends(get_db)) -> list[BookRead]:
-    rows = db.scalars(select(Book).order_by(Book.id)).all()
+    rows = db.scalars(
+        public_books_stmt().order_by(Book.id.desc())
+    ).all()
+
     return [to_book_read(row) for row in rows]
 
 
 @router.get("/featured", response_model=BookRead)
 def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
+    manual_featured = db.scalar(
+        public_books_stmt()
+        .where(Book.is_featured.is_(True))
+        .order_by(Book.id.desc())
+        .limit(1)
+    )
+
+    if manual_featured:
+        return to_book_read(manual_featured)
+
     since = datetime.now(timezone.utc) - timedelta(days=30)
 
     featured_score = (
@@ -63,7 +89,7 @@ def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
     ).label("featured_score")
 
     row = db.scalar(
-        select(Book)
+        public_books_stmt()
         .outerjoin(
             LibraryItem,
             (LibraryItem.book_id == Book.id)
@@ -84,6 +110,74 @@ def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
 
     return to_book_read(row)
 
+
+@router.patch("/{book_id}/feature", response_model=BookRead)
+def set_featured_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if book.archived_at is not None:
+        raise HTTPException(status_code=400, detail="Archived books cannot be featured")
+
+    if book.visibility != "published":
+        raise HTTPException(status_code=400, detail="Only published books can be featured")
+
+    db.query(Book).update({Book.is_featured: False})
+    book.is_featured = True
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.featured",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+@router.patch("/{book_id}/unfeature", response_model=BookRead)
+def unset_featured_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    book.is_featured = False
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.unfeatured",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
 @router.get("/trending", response_model=list[BookRead])
 def list_trending_books(
     limit: int = 12,
@@ -93,19 +187,22 @@ def list_trending_books(
 
     trending_score = (
         func.count(LibraryItem.id) * 2
-        + func.sum(
-            case(
-                (LibraryItem.status == "reading", 5),
-                (LibraryItem.status == "saved", 3),
-                (LibraryItem.status == "finished", 4),
-                else_=1,
-            )
+        + func.coalesce(
+            func.sum(
+                case(
+                    (LibraryItem.status == "reading", 5),
+                    (LibraryItem.status == "saved", 3),
+                    (LibraryItem.status == "finished", 4),
+                    else_=1,
+                )
+            ),
+            0,
         )
         + func.coalesce(func.avg(Book.rating), 0)
     ).label("trending_score")
 
     rows = db.scalars(
-        select(Book)
+        public_books_stmt()
         .outerjoin(
             LibraryItem,
             (LibraryItem.book_id == Book.id)
@@ -117,6 +214,8 @@ def list_trending_books(
     ).all()
 
     return [to_book_read(row) for row in rows]
+
+
 
 @router.get("/genres", response_model=list[str])
 def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
@@ -140,7 +239,7 @@ def discover_books(
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
 ) -> list[BookRead]:
-    stmt = select(Book)
+    stmt = public_books_stmt()
 
     if q:
         pattern = f"%{q.lower()}%"
@@ -158,19 +257,30 @@ def discover_books(
         rows = [
             book
             for book in rows
-            if genre.lower() in [item.lower() for item in book.genres]
+            if any(item.lower() == genre.lower() for item in book.genres)
         ]
 
     if sort == "top-rated":
-        rows.sort(key=lambda book: (book.rating, book.id), reverse=True)
+        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
     elif sort == "newest":
         rows.sort(key=lambda book: book.id, reverse=True)
+    elif sort == "featured":
+        rows.sort(
+            key=lambda book: (
+                1 if getattr(book, "is_featured", False) else 0,
+                book.rating or 0,
+                book.id,
+            ),
+            reverse=True,
+        )
     else:
-        rows.sort(key=lambda book: (book.rating, book.id), reverse=True)
+        rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
 
     rows = rows[offset : offset + limit]
 
     return [to_book_read(row) for row in rows]
+
+
 
 
 @router.get("/discover/stats")
@@ -194,12 +304,37 @@ def discover_stats(
         "categories": len(categories),
     }
 
-@router.get("/{book_id}", response_model=BookRead)
-def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
+
+
+@router.get("/admin/{book_id}", response_model=BookRead)
+def admin_get_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
     row = db.scalar(select(Book).where(Book.id == book_id))
+
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
+
     return to_book_read(row)
+
+
+
+@router.get("/{book_id}", response_model=BookRead)
+def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
+    row = db.scalar(
+        public_books_stmt().where(Book.id == book_id)
+    )
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    return to_book_read(row)
+
+
 
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
@@ -216,6 +351,8 @@ def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContent
         source_url=row.source_url,
         content_text=row.content_text,
     )
+
+
 
 
 @router.post("/upload-pdf", response_model=BookRead, status_code=201)
@@ -273,6 +410,8 @@ async def upload_pdf_book(
     return to_book_read(book)
 
 
+
+
 @router.patch("/{book_id}/update-pdf", response_model=BookRead)
 async def update_book_pdf_only(
     request: Request,
@@ -287,14 +426,9 @@ async def update_book_pdf_only(
         raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
 
     book = db.scalar(select(Book).where(Book.id == book_id))
+
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
-
-    if book.source_path and os.path.exists(book.source_path):
-        try:
-            os.remove(book.source_path)
-        except OSError:
-            pass
 
     suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
     filename = f"{uuid4().hex}{suffix}"
@@ -306,6 +440,12 @@ async def update_book_pdf_only(
     if len(file_bytes) > max_pdf_size:
         raise HTTPException(status_code=413, detail="PDF file is too large")
 
+    if book.source_path and os.path.exists(book.source_path):
+        try:
+            os.remove(book.source_path)
+        except OSError:
+            pass
+
     destination.write_bytes(file_bytes)
 
     source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
@@ -315,10 +455,21 @@ async def update_book_pdf_only(
     book.source_path = str(destination)
     book.mime_type = "application/pdf"
 
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.pdf_replaced",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"filename": filename},
+    )
+
     db.commit()
     db.refresh(book)
 
     return to_book_read(book)
+
+
 
 
 @router.patch("/{book_id}", response_model=BookRead)
@@ -359,3 +510,265 @@ def update_book_metadata(
     db.refresh(book)
 
     return to_book_read(book)
+
+@router.get("/admin/list", response_model=list[BookRead])
+def admin_list_books(
+    include_archived: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[BookRead]:
+    require_admin_user(current_user)
+
+    stmt = select(Book).order_by(Book.id.desc())
+
+    if not include_archived:
+        stmt = stmt.where(Book.archived_at.is_(None))
+
+    rows = db.scalars(stmt).all()
+    return [to_book_read(row) for row in rows]
+
+
+
+
+
+@router.patch("/{book_id}", response_model=BookRead)
+def update_book_metadata(
+    book_id: int,
+    title: str | None = Form(None),
+    author: str | None = Form(None),
+    cover: str | None = Form(None),
+    description: str | None = Form(None),
+    rating: float | None = Form(None),
+    pages: int | None = Form(None),
+    genre_csv: str | None = Form(None),
+    visibility: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    if visibility is not None and visibility not in {"draft", "published"}:
+        raise HTTPException(status_code=400, detail="Invalid visibility")
+
+    if title is not None:
+        book.title = title
+    if author is not None:
+        book.author = author
+    if cover is not None:
+        book.cover = cover
+    if description is not None:
+        book.description = description
+    if rating is not None:
+        book.rating = rating
+    if pages is not None:
+        book.pages = pages
+    if genre_csv is not None:
+        book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
+    if visibility is not None:
+        book.visibility = visibility
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.metadata_updated",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+
+
+@router.post("/{book_id}/cover", response_model=BookRead)
+async def upload_book_cover(
+    request: Request,
+    book_id: int,
+    cover_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    if cover_file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Cover must be PNG, JPEG, or WEBP",
+        )
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    suffix = Path(cover_file.filename or "cover").suffix or ".jpg"
+    filename = f"{uuid4().hex}{suffix}"
+    destination = COVERS_STORAGE_DIR / filename
+
+    file_bytes = await cover_file.read()
+
+    max_cover_size = 5 * 1024 * 1024
+    if len(file_bytes) > max_cover_size:
+        raise HTTPException(status_code=413, detail="Cover image is too large")
+
+    destination.write_bytes(file_bytes)
+
+    cover_url = str(request.base_url).rstrip("/") + f"/static/covers/{filename}"
+
+    book.cover = cover_url
+    book.cover_path = str(destination)
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.cover_uploaded",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"filename": filename},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+
+@router.patch("/{book_id}/archive", response_model=BookRead)
+def archive_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    book.archived_at = datetime.now(timezone.utc)
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.archived",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+
+@router.patch("/{book_id}/restore", response_model=BookRead)
+def restore_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    book.archived_at = None
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.restored",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
+
+    db.commit()
+    db.refresh(book)
+
+    return to_book_read(book)
+
+
+@router.delete("/{book_id}", status_code=204)
+def delete_book(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    title = book.title
+
+    if book.source_path and os.path.exists(book.source_path):
+        try:
+            os.remove(book.source_path)
+        except OSError:
+            pass
+
+    if getattr(book, "cover_path", None) and os.path.exists(book.cover_path):
+        try:
+            os.remove(book.cover_path)
+        except OSError:
+            pass
+
+    db.delete(book)
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.deleted",
+        entity_type="book",
+        entity_id=book_id,
+        metadata={"title": title},
+    )
+
+    db.commit()
+
+
+
+@router.get("/admin/activity")
+def list_admin_activity(
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin_user(current_user)
+
+    rows = db.scalars(
+        select(AdminActivityLog)
+        .order_by(AdminActivityLog.created_at.desc(), AdminActivityLog.id.desc())
+        .limit(limit)
+    ).all()
+
+    return [
+        {
+            "id": row.id,
+            "admin_user_id": row.admin_user_id,
+            "action": row.action,
+            "entity_type": row.entity_type,
+            "entity_id": row.entity_id,
+            "metadata": row.metadata_json,
+            "created_at": row.created_at,
+        }
+        for row in rows
+    ]

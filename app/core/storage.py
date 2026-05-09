@@ -14,11 +14,13 @@ def get_storage_root() -> Path:
 STORAGE_ROOT = get_storage_root()
 BOOKS_STORAGE_DIR = STORAGE_ROOT / "books"
 AVATARS_STORAGE_DIR = STORAGE_ROOT / "avatars"
+COVERS_STORAGE_DIR = STORAGE_ROOT / "covers"
 
 
 def ensure_storage_dirs() -> None:
     STORAGE_ROOT.mkdir(parents=True, exist_ok=True)
     BOOKS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+    COVERS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
     AVATARS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 

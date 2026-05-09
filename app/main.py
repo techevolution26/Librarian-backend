@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
-from app.core.storage import ensure_storage_dirs
+from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
 from app.routes import auth, books, library, profile, settings as settings_route, connections, circles
 from app.core.database import Base, engine
 
@@ -31,10 +31,12 @@ AVATAR_STORAGE_DIR = STORAGE_ROOT / "avatars"
 # Ensure directories exist
 BOOK_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 AVATAR_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
+COVERS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mount static files
 app.mount("/static/books", StaticFiles(directory=BOOK_STORAGE_DIR), name="book-files")
 app.mount("/static/avatars", StaticFiles(directory=AVATAR_STORAGE_DIR), name="avatar-files")
+app.mount("/static/covers", StaticFiles(directory=COVERS_STORAGE_DIR), name="cover-files")
 
 # Include Routers
 app.include_router(auth.router)
