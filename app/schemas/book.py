@@ -29,3 +29,10 @@ class BookContentRead(BaseModel):
     mime_type: str | None = None
     source_url: str | None = None
     content_text: str | None = None
+
+class AdminBookListRead(BaseModel):
+    items: list[BookRead]
+    total: int
+    page: int
+    limit: int
+    pages: int

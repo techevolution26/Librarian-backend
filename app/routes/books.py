@@ -1,4 +1,5 @@
 import os
+import math
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
@@ -9,7 +10,7 @@ from app.models.library_item import LibraryItem
 from app.core.database import get_db
 from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
 from app.models.book import Book
-from app.schemas.book import BookContentRead, BookRead
+from app.schemas.book import BookContentRead, BookRead ,AdminBookListRead
 from app.models.user import User
 from app.core.authz import require_admin_user
 from app.core.security import get_current_user
@@ -50,21 +51,58 @@ def public_books_stmt():
 
 
 
-@router.get("/admin/list", response_model=list[BookRead])
+@router.get("/admin/list", response_model=AdminBookListRead)
 def admin_list_books(
-    include_archived: bool = True,
+    q: str | None = None,
+    visibility: str = "all",
+    status: str = "all",
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=12, ge=1, le=100),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[BookRead]:
+) -> AdminBookListRead:
     require_admin_user(current_user)
 
-    stmt = select(Book).order_by(Book.id.desc())
+    stmt = select(Book)
 
-    if not include_archived:
+    if q and q.strip():
+        pattern = f"%{q.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(Book.title).like(pattern),
+                func.lower(Book.author).like(pattern),
+                func.lower(Book.description).like(pattern),
+            )
+        )
+
+    if visibility != "all":
+        if visibility not in {"published", "draft"}:
+            raise HTTPException(status_code=400, detail="Invalid visibility")
+        stmt = stmt.where(Book.visibility == visibility)
+
+    if status == "active":
         stmt = stmt.where(Book.archived_at.is_(None))
+    elif status == "archived":
+        stmt = stmt.where(Book.archived_at.is_not(None))
+    elif status != "all":
+        raise HTTPException(status_code=400, detail="Invalid status")
 
-    rows = db.scalars(stmt).all()
-    return [to_book_read(row) for row in rows]
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+    pages = max(math.ceil(total / limit), 1)
+    safe_page = min(page, pages)
+    offset = (safe_page - 1) * limit
+
+    rows = db.scalars(
+        stmt.order_by(Book.id.desc()).offset(offset).limit(limit)
+    ).all()
+
+    return AdminBookListRead(
+        items=[to_book_read(row) for row in rows],
+        total=total,
+        page=safe_page,
+        limit=limit,
+        pages=pages,
+    )
 
 
 @router.get("/admin/activity")
