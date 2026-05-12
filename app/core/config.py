@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     app_name: str = "The Librarian API"
     database_url: str
     cors_origins: list[str] = ["https://thelibrarian-sigma.vercel.app","https://thelibrarian-git-master-global-techresolute-app.vercel.app",]
+    public_backend_url: str | None = None
+    max_pdf_upload_mb: int = 150
+    max_cover_upload_mb: int = 10
 
     secret_key: str
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days

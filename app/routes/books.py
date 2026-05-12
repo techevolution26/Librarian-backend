@@ -17,6 +17,8 @@ from app.core.security import get_current_user
 
 from app.services.admin_activity import log_admin_activity
 from app.models.admin_activity_log import AdminActivityLog
+from app.services.uploads import validate_upload_file, save_upload_file, build_public_static_url
+from app.core.config import get_settings
 
 router = APIRouter(prefix="/books", tags=["books"])
 
@@ -450,22 +452,24 @@ async def upload_pdf_book(
 ) -> BookRead:
     require_admin_user(current_user)
 
-    if pdf_file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+    settings = get_settings()
 
-    suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
-    filename = f"{uuid4().hex}{suffix}"
-    destination = BOOKS_STORAGE_DIR / filename
+    validate_upload_file(
+        pdf_file,
+        allowed_content_types={"application/pdf"},
+        max_size_mb=settings.max_pdf_upload_mb,
+        label="PDF",
+    )
 
-    file_bytes = await pdf_file.read()
+    filename, destination = await save_upload_file(
+        pdf_file,
+        destination_dir=BOOKS_STORAGE_DIR,
+        fallback_filename="book.pdf",
+        max_size_mb=settings.max_pdf_upload_mb,
+        label="PDF",
+    )
 
-    max_pdf_size = 25 * 1024 * 1024
-    if len(file_bytes) > max_pdf_size:
-        raise HTTPException(status_code=413, detail="PDF file is too large")
-
-    destination.write_bytes(file_bytes)
-
-    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
+    source_url = build_public_static_url(f"/static/books/{filename}", request)
 
     book = Book(
         title=title,
@@ -479,16 +483,25 @@ async def upload_pdf_book(
         source_path=str(destination),
         mime_type="application/pdf",
         content_text=None,
+        visibility="published",
     )
     book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
 
     db.add(book)
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.pdf_uploaded",
+        entity_type="book",
+        entity_id=None,
+        metadata={"title": title, "filename": filename},
+    )
+
     db.commit()
     db.refresh(book)
 
     return to_book_read(book)
-
-
 
 
 @router.patch("/{book_id}/update-pdf", response_model=BookRead)
@@ -501,33 +514,37 @@ async def update_book_pdf_only(
 ) -> BookRead:
     require_admin_user(current_user)
 
-    if pdf_file.content_type != "application/pdf":
-        raise HTTPException(status_code=400, detail="Only PDF uploads are supported")
+    settings = get_settings()
+
+    validate_upload_file(
+        pdf_file,
+        allowed_content_types={"application/pdf"},
+        max_size_mb=settings.max_pdf_upload_mb,
+        label="PDF",
+    )
 
     book = db.scalar(select(Book).where(Book.id == book_id))
 
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    suffix = Path(pdf_file.filename or "book.pdf").suffix or ".pdf"
-    filename = f"{uuid4().hex}{suffix}"
-    destination = BOOKS_STORAGE_DIR / filename
+    old_source_path = book.source_path
 
-    file_bytes = await pdf_file.read()
+    filename, destination = await save_upload_file(
+        pdf_file,
+        destination_dir=BOOKS_STORAGE_DIR,
+        fallback_filename="book.pdf",
+        max_size_mb=settings.max_pdf_upload_mb,
+        label="PDF",
+    )
 
-    max_pdf_size = 25 * 1024 * 1024
-    if len(file_bytes) > max_pdf_size:
-        raise HTTPException(status_code=413, detail="PDF file is too large")
-
-    if book.source_path and os.path.exists(book.source_path):
+    if old_source_path and os.path.exists(old_source_path):
         try:
-            os.remove(book.source_path)
+            os.remove(old_source_path)
         except OSError:
             pass
 
-    destination.write_bytes(file_bytes)
-
-    source_url = str(request.base_url).rstrip("/") + f"/static/books/{filename}"
+    source_url = build_public_static_url(f"/static/books/{filename}", request)
 
     book.source_type = "pdf"
     book.source_url = source_url
@@ -540,15 +557,13 @@ async def update_book_pdf_only(
         action="book.pdf_replaced",
         entity_type="book",
         entity_id=book.id,
-        metadata={"filename": filename},
+        metadata={"title": book.title, "filename": filename},
     )
 
     db.commit()
     db.refresh(book)
 
     return to_book_read(book)
-
-
 
 
 @router.patch("/{book_id}", response_model=BookRead)
@@ -659,30 +674,29 @@ async def upload_book_cover(
 ) -> BookRead:
     require_admin_user(current_user)
 
-    if cover_file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Cover must be PNG, JPEG, or WEBP",
-        )
-
     book = db.scalar(select(Book).where(Book.id == book_id))
 
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    suffix = Path(cover_file.filename or "cover").suffix or ".jpg"
-    filename = f"{uuid4().hex}{suffix}"
-    destination = COVERS_STORAGE_DIR / filename
+    settings = get_settings()
 
-    file_bytes = await cover_file.read()
+    validate_upload_file(
+        cover_file,
+        allowed_content_types={"image/png", "image/jpeg", "image/webp"},
+        max_size_mb=settings.max_cover_upload_mb,
+        label="Cover",
+    )
 
-    max_cover_size = 5 * 1024 * 1024
-    if len(file_bytes) > max_cover_size:
-        raise HTTPException(status_code=413, detail="Cover image is too large")
+    filename, destination = await save_upload_file(
+        cover_file,
+        destination_dir=COVERS_STORAGE_DIR,
+        fallback_filename="cover.jpg",
+        max_size_mb=settings.max_cover_upload_mb,
+        label="Cover",
+    )
 
-    destination.write_bytes(file_bytes)
-
-    cover_url = str(request.base_url).rstrip("/") + f"/static/covers/{filename}"
+    cover_url = build_public_static_url(f"/static/covers/{filename}", request)
 
     book.cover = cover_url
     book.cover_path = str(destination)
