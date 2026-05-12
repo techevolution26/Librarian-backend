@@ -322,3 +322,19 @@ async def upload_avatar(
     library_rows = load_library_rows(db, current_user.id)
 
     return build_profile_response(current_user, library_rows)
+
+
+@router.get("/sidebar-summary", response_model=SidebarSummaryRead)
+def get_sidebar_summary(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> SidebarSummaryRead:
+    library_rows = load_library_rows(db, current_user.id)
+    streak = calculate_reading_streak_days(library_rows)
+
+    return SidebarSummaryRead(
+        full_name=current_user.full_name,
+        avatar_url=current_user.avatar_url,
+        reading_streak_days=streak,
+        role=getattr(current_user, "role", "USER"),
+    )
