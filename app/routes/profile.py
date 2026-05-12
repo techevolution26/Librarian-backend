@@ -21,6 +21,7 @@ from app.schemas.profile import (
     UserProfileRead,
     UserProfileUpdate,
 )
+from app.services.uploads import build_public_static_url
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -309,29 +310,15 @@ async def upload_avatar(
     file_bytes = await avatar_file.read()
     destination.write_bytes(file_bytes)
 
-    avatar_url = str(request.base_url).rstrip("/") + f"/static/avatars/{filename}"
+    avatar_url = build_public_static_url(f"/static/avatars/{filename}", request)
+
     current_user.avatar_url = avatar_url
 
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
+
     db.refresh(current_user, attribute_names=["settings"])
-
     library_rows = load_library_rows(db, current_user.id)
-    return build_profile_response(db, current_user, library_rows)
 
-
-@router.get("/sidebar-summary", response_model=SidebarSummaryRead)
-def get_sidebar_summary(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> SidebarSummaryRead:
-    library_rows = load_library_rows(db, current_user.id)
-    streak = calculate_reading_streak_days(library_rows)
-
-    return SidebarSummaryRead(
-        full_name=current_user.full_name,
-        avatar_url=current_user.avatar_url,
-        reading_streak_days=streak,
-        role=getattr(current_user, "role", "USER"),
-    )
+    return build_profile_response(current_user, library_rows)
