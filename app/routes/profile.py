@@ -317,11 +317,11 @@ async def upload_avatar(
     db.add(current_user)
     db.commit()
     db.refresh(current_user)
-
     db.refresh(current_user, attribute_names=["settings"])
+
     library_rows = load_library_rows(db, current_user.id)
 
-    return build_profile_response(current_user, library_rows)
+    return build_profile_response(db, current_user, library_rows)
 
 
 @router.get("/sidebar-summary", response_model=SidebarSummaryRead)
