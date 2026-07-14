@@ -48,9 +48,33 @@ class Book(Base):
         self.genre_csv = ",".join(v.strip() for v in values if v.strip())
 
     @property
+    def tags(self) -> list[str]:
+        return self.genres
+
+    @tags.setter
+    def tags(self, values: list[str]) -> None:
+        self.genres = values
+
+    @property
     def genre(self) -> list[str]:
         return self.genres
 
     @genre.setter
     def genre(self, values: list[str]) -> None:
         self.genres = values
+
+    @property
+    def authors(self) -> list[str]:
+        return [a.strip() for a in self.author.split(",") if a.strip()]
+
+    @authors.setter
+    def authors(self, values: list[str]) -> None:
+        self.author = ", ".join(v.strip() for v in values if v.strip())
+
+    @property
+    def content_type(self) -> str:
+        return self.source_type
+
+    @content_type.setter
+    def content_type(self, value: str) -> None:
+        self.source_type = value

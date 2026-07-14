@@ -25,24 +25,31 @@ router = APIRouter(prefix="/books", tags=["books"])
 ensure_storage_dirs()
 
 
-def to_book_read(row: Book) -> BookRead:
+def to_resource_read(row: Book) -> BookRead:
 
     return BookRead(
         id=row.id,
         title=row.title,
         author=row.author,
+        authors=row.authors,
         cover=row.cover,
         description=row.description,
         rating=row.rating,
         pages=row.pages,
         genre=row.genres,
+        tags=row.tags,
         source_type=row.source_type,
+        content_type=row.content_type,
         source_url=row.source_url,
         mime_type=row.mime_type,
         visibility=getattr(row, "visibility", "published"),
         archived_at=getattr(row, "archived_at", None),
+        cover_path=getattr(row, "cover_path", None),
         is_featured=getattr(row, "is_featured", False),
     )
+
+
+to_book_read = to_resource_read
 
 def public_books_stmt():
     return (
@@ -428,6 +435,7 @@ def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContent
         id=row.id,
         title=row.title,
         source_type=row.source_type,
+        content_type=row.content_type,
         mime_type=row.mime_type,
         source_url=row.source_url,
         content_text=row.content_text,
@@ -576,46 +584,6 @@ def update_book_metadata(
     rating: float | None = Form(None),
     pages: int | None = Form(None),
     genre_csv: str | None = Form(None),
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> BookRead:
-    require_admin_user(current_user)
-
-    book = db.scalar(select(Book).where(Book.id == book_id))
-    if not book:
-        raise HTTPException(status_code=404, detail="Book not found")
-
-    if title is not None:
-        book.title = title
-    if author is not None:
-        book.author = author
-    if cover is not None:
-        book.cover = cover
-    if description is not None:
-        book.description = description
-    if rating is not None:
-        book.rating = rating
-    if pages is not None:
-        book.pages = pages
-    if genre_csv is not None:
-        book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
-
-    db.commit()
-    db.refresh(book)
-
-    return to_book_read(book)
-
-
-@router.patch("/{book_id}", response_model=BookRead)
-def update_book_metadata(
-    book_id: int,
-    title: str | None = Form(None),
-    author: str | None = Form(None),
-    cover: str | None = Form(None),
-    description: str | None = Form(None),
-    rating: float | None = Form(None),
-    pages: int | None = Form(None),
-    genre_csv: str | None = Form(None),
     visibility: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -659,7 +627,7 @@ def update_book_metadata(
     db.commit()
     db.refresh(book)
 
-    return to_book_read(book)
+    return to_resource_read(book)
 
 
 
