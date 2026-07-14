@@ -61,6 +61,14 @@ def to_library_item_read(row: LibraryItem) -> LibraryItemRead:
 
 
 
+def merge_pdf_progress_state(item: LibraryItem, payload: PdfProgressUpdate) -> LibraryItem:
+    item.current_page = max(item.current_page or 1, payload.current_page)
+    item.total_pages = payload.total_pages
+    item.bookmark_page = payload.bookmark_page if payload.bookmark_page is not None else item.bookmark_page
+    item.progress = max(item.progress, payload.progress)
+    return item
+
+
 @router.get("/summary", response_model=LibrarySummary)
 def get_library_summary(
     db: Session = Depends(get_db),
@@ -256,10 +264,7 @@ def save_pdf_progress(
         raise HTTPException(status_code=404, detail="Library item not found")
 
     item.status = "reading"
-    item.current_page = payload.current_page
-    item.total_pages = payload.total_pages
-    item.bookmark_page = payload.bookmark_page
-    item.progress = payload.progress
+    merge_pdf_progress_state(item, payload)
     item.last_read_at = datetime.now(timezone.utc)
 
     if payload.progress >= 100:
