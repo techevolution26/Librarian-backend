@@ -2,15 +2,17 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import jwt
-from fastapi import Cookie, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Cookie, Depends, HTTPException, status  # type: ignore[import]
+from fastapi.security import OAuth2PasswordBearer  # type: ignore[import]
 from sqlalchemy import select
 from sqlalchemy.orm import Session
-from werkzeug.security import check_password_hash, generate_password_hash
+from passlib.context import CryptContext  # type: ignore[import]
 
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.models.user import User
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 settings = get_settings()
 
@@ -21,11 +23,11 @@ oauth2_scheme = OAuth2PasswordBearer(
 
 
 def hash_password(password: str) -> str:
-    return generate_password_hash(password)
+    return pwd_context.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return check_password_hash(password_hash, password)
+    return pwd_context.verify(password, password_hash)
 
 
 def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:

@@ -47,9 +47,9 @@ app.include_router(settings_route.router)
 app.include_router(connections.router)
 app.include_router(circles.router)
 
-@app.on_event("startup")
-def startup():
-    Base.metadata.create_all(bind=engine)
+# @app.on_event("startup")
+# def startup():
+#     Base.metadata.create_all(bind=engine)
 
 @app.get("/")
 def root():
