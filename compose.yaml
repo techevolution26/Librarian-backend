@@ -1,0 +1,59 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-librarian}
+      POSTGRES_USER: ${POSTGRES_USER:-librarian}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-librarian_dev_password}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - librarian_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-librarian} -d ${POSTGRES_DB:-librarian}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-librarian}:${POSTGRES_PASSWORD:-librarian_dev_password}@db:5432/${POSTGRES_DB:-librarian}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8081","http://127.0.0.1:8081"]}
+      APP_NAME: ${APP_NAME:-The Librarian API}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-10080}
+      STORAGE_DIR: /app/storage
+      PUBLIC_BACKEND_URL: ${PUBLIC_BACKEND_URL:-http://localhost:8000}
+      MAX_PDF_UPLOAD_MB: ${MAX_PDF_UPLOAD_MB:-150}
+      MAX_COVER_UPLOAD_MB: ${MAX_COVER_UPLOAD_MB:-10}
+      MAX_AVATAR_UPLOAD_MB: ${MAX_AVATAR_UPLOAD_MB:-5}
+    ports:
+      - "${API_PORT:-8000}:8000"
+    volumes:
+      - librarian_storage:/app/storage
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+          initial_sync: true
+          ignore:
+            - __pycache__/
+            - "*.pyc"
+        - action: rebuild
+          path: ./requirements.txt
+        - action: rebuild
+          path: ./Dockerfile
+
+volumes:
+  librarian_postgres_data:
+  librarian_storage:

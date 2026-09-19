@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.core.security import (
     create_access_token,
     get_current_user,
@@ -47,7 +48,7 @@ def signup(
     try:
         user = User(
             full_name=payload.full_name,
-            email=payload.email,
+            email=str(payload.email).lower(),
             password_hash=hash_password(payload.password),
             role="USER",
             plan="free",
@@ -78,7 +79,7 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
-    user = db.scalar(select(User).where(User.email == payload.email))
+    user = db.scalar(select(User).where(User.email == str(payload.email).lower()))
     if not user or not verify_password(payload.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -93,13 +94,14 @@ def login(
 
     token = create_access_token(user.id)
 
+    settings = get_settings()
     response.set_cookie(
         key="access_token",
         value=token,
         httponly=True,
         samesite="none",
         secure=True,
-        max_age=60 * 60 * 24 * 7,
+        max_age=settings.access_token_expire_minutes * 60,
         path="/",
     )
 

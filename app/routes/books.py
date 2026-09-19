@@ -9,15 +9,21 @@ from sqlalchemy.orm import Session
 from app.models.library_item import LibraryItem
 from app.core.database import get_db
 from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
-from app.models.book import Book
-from app.schemas.book import BookContentRead, BookRead ,AdminBookListRead
+from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
+from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
 from app.models.user import User
 from app.core.authz import require_admin_user
 from app.core.security import get_current_user
 
 from app.services.admin_activity import log_admin_activity
 from app.models.admin_activity_log import AdminActivityLog
-from app.services.uploads import validate_upload_file, save_upload_file, build_public_static_url
+from app.services.uploads import (
+    validate_upload_file,
+    save_upload_file,
+    build_public_static_url,
+    compute_sha256,
+    generate_accession_no,
+)
 from app.core.config import get_settings
 
 router = APIRouter(prefix="/books", tags=["books"])
@@ -46,6 +52,18 @@ def to_resource_read(row: Book) -> BookRead:
         archived_at=getattr(row, "archived_at", None),
         cover_path=getattr(row, "cover_path", None),
         is_featured=getattr(row, "is_featured", False),
+        accession_no=getattr(row, "accession_no", None),
+        language=getattr(row, "language", "en"),
+        subjects=getattr(row, "subjects", []),
+        origin=getattr(row, "origin", None),
+        era=getattr(row, "era", None),
+        original_format=getattr(row, "original_format", "born-digital"),
+        rights_statement=getattr(row, "rights_statement", "all-rights-reserved"),
+        condition_notes=getattr(row, "condition_notes", None),
+        curator_note=getattr(row, "curator_note", None),
+        checksum_sha256=getattr(row, "checksum_sha256", None),
+        digitized_by=getattr(row, "digitized_by", None),
+        digitized_at=getattr(row, "digitized_at", None),
     )
 
 
@@ -255,6 +273,10 @@ def list_trending_books(
 def discover_books(
     q: str | None = None,
     genre: str = "All",
+    subject: str = "All",
+    language: str = "All",
+    original_format: str = "All",
+    era: str = "All",
     sort: str = "recommended",
     limit: int = Query(default=24, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -280,6 +302,26 @@ def discover_books(
             for book in rows
             if any(item.lower() == genre.lower() for item in book.genres)
         ]
+
+    if subject and subject.lower() != "all":
+        rows = [
+            book
+            for book in rows
+            if any(item.lower() == subject.lower() for item in book.subjects)
+        ]
+
+    if language and language.lower() != "all":
+        rows = [book for book in rows if book.language.lower() == language.lower()]
+
+    if original_format and original_format.lower() != "all":
+        rows = [
+            book
+            for book in rows
+            if book.original_format.lower() == original_format.lower()
+        ]
+
+    if era and era.lower() != "all":
+        rows = [book for book in rows if (book.era or "").lower() == era.lower()]
 
     if sort == "top-rated":
         rows.sort(key=lambda book: (book.rating or 0, book.id), reverse=True)
@@ -313,6 +355,37 @@ def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
             genres.add(genre)
 
     return ["All", *sorted(genres)]
+
+
+@router.get("/facets", response_model=BookFacets)
+def list_book_facets(db: Session = Depends(get_db)) -> BookFacets:
+    """Vocabulary currently in use across published books, for building
+    faceted-search filter chips (genre/subject/language/era/format) the way
+    an archive catalog exposes its browsable facets."""
+    rows = db.scalars(public_books_stmt()).all()
+
+    genres: set[str] = set()
+    subjects: set[str] = set()
+    languages: set[str] = set()
+    eras: set[str] = set()
+    formats: set[str] = set()
+
+    for book in rows:
+        genres.update(book.genres)
+        subjects.update(book.subjects)
+        languages.add(book.language)
+        if book.era:
+            eras.add(book.era)
+        formats.add(book.original_format)
+
+    return BookFacets(
+        genres=sorted(genres),
+        subjects=sorted(subjects),
+        languages=sorted(languages),
+        eras=sorted(eras),
+        original_formats=sorted(formats),
+        rights_statements=sorted(RIGHTS_STATEMENTS),
+    )
 
 
 @router.get("/", response_model=list[BookRead])
@@ -427,7 +500,9 @@ def discover_stats(
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
 def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContentRead:
-    row = db.scalar(select(Book).where(Book.id == book_id))
+    row = db.scalar(
+        public_books_stmt().where(Book.id == book_id)
+    )
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -454,6 +529,15 @@ async def upload_pdf_book(
     rating: float = Form(0),
     pages: int = Form(0),
     genre_csv: str = Form(""),
+    subjects_csv: str = Form(""),
+    language: str = Form("en"),
+    origin: str | None = Form(None),
+    era: str | None = Form(None),
+    original_format: str = Form("born-digital"),
+    rights_statement: str = Form("all-rights-reserved"),
+    condition_notes: str | None = Form(None),
+    curator_note: str | None = Form(None),
+    digitized_by: str | None = Form(None),
     pdf_file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -461,6 +545,11 @@ async def upload_pdf_book(
     require_admin_user(current_user)
 
     settings = get_settings()
+
+    if original_format not in ORIGINAL_FORMATS:
+        raise HTTPException(status_code=400, detail="Invalid original_format")
+    if rights_statement not in RIGHTS_STATEMENTS:
+        raise HTTPException(status_code=400, detail="Invalid rights_statement")
 
     validate_upload_file(
         pdf_file,
@@ -492,8 +581,20 @@ async def upload_pdf_book(
         mime_type="application/pdf",
         content_text=None,
         visibility="published",
+        accession_no=generate_accession_no(),
+        language=language,
+        origin=origin,
+        era=era,
+        original_format=original_format,
+        rights_statement=rights_statement,
+        condition_notes=condition_notes,
+        curator_note=curator_note,
+        digitized_by=digitized_by,
+        digitized_at=datetime.now(timezone.utc),
+        checksum_sha256=compute_sha256(destination),
     )
     book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
+    book.subjects = [s.strip() for s in subjects_csv.split(",") if s.strip()]
 
     db.add(book)
 
@@ -558,6 +659,8 @@ async def update_book_pdf_only(
     book.source_url = source_url
     book.source_path = str(destination)
     book.mime_type = "application/pdf"
+    book.checksum_sha256 = compute_sha256(destination)
+    book.digitized_at = datetime.now(timezone.utc)
 
     log_admin_activity(
         db,
@@ -585,6 +688,16 @@ def update_book_metadata(
     pages: int | None = Form(None),
     genre_csv: str | None = Form(None),
     visibility: str | None = Form(None),
+    subjects_csv: str | None = Form(None),
+    language: str | None = Form(None),
+    origin: str | None = Form(None),
+    era: str | None = Form(None),
+    original_format: str | None = Form(None),
+    rights_statement: str | None = Form(None),
+    condition_notes: str | None = Form(None),
+    curator_note: str | None = Form(None),
+    digitized_by: str | None = Form(None),
+    accession_no: str | None = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BookRead:
@@ -597,6 +710,10 @@ def update_book_metadata(
 
     if visibility is not None and visibility not in {"draft", "published"}:
         raise HTTPException(status_code=400, detail="Invalid visibility")
+    if original_format is not None and original_format not in ORIGINAL_FORMATS:
+        raise HTTPException(status_code=400, detail="Invalid original_format")
+    if rights_statement is not None and rights_statement not in RIGHTS_STATEMENTS:
+        raise HTTPException(status_code=400, detail="Invalid rights_statement")
 
     if title is not None:
         book.title = title
@@ -614,6 +731,26 @@ def update_book_metadata(
         book.genres = [g.strip() for g in genre_csv.split(",") if g.strip()]
     if visibility is not None:
         book.visibility = visibility
+    if subjects_csv is not None:
+        book.subjects = [s.strip() for s in subjects_csv.split(",") if s.strip()]
+    if language is not None:
+        book.language = language
+    if origin is not None:
+        book.origin = origin
+    if era is not None:
+        book.era = era
+    if original_format is not None:
+        book.original_format = original_format
+    if rights_statement is not None:
+        book.rights_statement = rights_statement
+    if condition_notes is not None:
+        book.condition_notes = condition_notes
+    if curator_note is not None:
+        book.curator_note = curator_note
+    if digitized_by is not None:
+        book.digitized_by = digitized_by
+    if accession_no is not None:
+        book.accession_no = accession_no
 
     log_admin_activity(
         db,

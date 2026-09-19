@@ -32,7 +32,8 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(subject: str | int, expires_delta: timedelta | None = None) -> str:
     expire = datetime.now(timezone.utc) + (
-        expires_delta or timedelta(days=7)
+        expires_delta
+        or timedelta(minutes=settings.access_token_expire_minutes)
     )
 
     payload: dict[str, Any] = {

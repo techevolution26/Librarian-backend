@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 from re import sub
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, select
 
@@ -358,10 +357,20 @@ def create_progress_update(
 ) -> CircleProgressUpdateRead:
     require_circle_member(db, circle_id, current_user.id)
 
+    circle_book = db.scalar(
+        select(CircleBook).where(
+            CircleBook.id == payload.circle_book_id,
+            CircleBook.circle_id == circle_id,
+        )
+    )
+    if not circle_book:
+        raise HTTPException(status_code=404, detail="Circle book not found")
+
     library_item = db.scalar(
         select(LibraryItem).where(
             LibraryItem.id == payload.library_item_id,
             LibraryItem.user_id == current_user.id,
+            LibraryItem.book_id == circle_book.book_id,
         )
     )
     if not library_item:

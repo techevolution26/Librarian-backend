@@ -1,4 +1,4 @@
-from sqlalchemy import select, text , null
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -16,8 +16,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Purpose Driven Life",
@@ -30,8 +30,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Crazy Love",
@@ -44,8 +44,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Case for Christ",
@@ -58,8 +58,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Holy Bible (KJV)",
@@ -72,8 +72,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
 
   },
   {
@@ -87,8 +87,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Pursuit of God",
@@ -101,8 +101,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Desiring God",
@@ -115,8 +115,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Gentle and Lowly",
@@ -129,8 +129,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Radical",
@@ -143,8 +143,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Holy Bible",
@@ -157,8 +157,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Holy Bible (LSV)",
@@ -171,8 +171,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Prayer Fasting & the Pursuit of God",
@@ -185,8 +185,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Holy Bible (NIV)",
@@ -199,8 +199,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
 
   #--- PRODUCTIVITY ---
@@ -215,8 +215,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Deep Work",
@@ -229,8 +229,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The 7 Habits of Highly Effective People",
@@ -243,8 +243,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Eat That Frog!",
@@ -257,8 +257,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Essentialism",
@@ -271,8 +271,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Power of Habit",
@@ -285,8 +285,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Getting Things Done",
@@ -299,8 +299,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Indistractable",
@@ -313,8 +313,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Make Time",
@@ -327,8 +327,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The 5 AM Club",
@@ -341,8 +341,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
 
   # --- MINDSET & SELF-HELP ---
@@ -357,8 +357,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Can't Hurt Me",
@@ -371,8 +371,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Daring Greatly",
@@ -385,8 +385,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Mountain Is You",
@@ -399,8 +399,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "12 Rules for Life",
@@ -413,8 +413,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Obstacle Is the Way",
@@ -428,8 +428,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Four Agreements",
@@ -442,8 +442,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Mindset: The New Psychology of Success",
@@ -456,8 +456,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Thinking, Fast and Slow",
@@ -470,8 +470,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Subtle Art of Not Giving a F*ck",
@@ -484,8 +484,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
 
   # --- BUSINESS & LEADERSHIP ---
@@ -500,8 +500,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Extreme Ownership",
@@ -514,8 +514,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Never Split the Difference",
@@ -528,8 +528,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Good to Great",
@@ -542,8 +542,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Start with Why",
@@ -556,8 +556,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Hard Thing About Hard Things",
@@ -570,8 +570,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Leaders Eat Last",
@@ -584,8 +584,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Zero to One",
@@ -598,8 +598,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Lean Startup",
@@ -612,8 +612,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Built to Last",
@@ -626,8 +626,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
 
   # --- FINANCE ---
@@ -642,8 +642,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "I Will Teach You to Be Rich",
@@ -656,8 +656,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Think and Grow Rich",
@@ -670,8 +670,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Richest Man in Babylon",
@@ -684,8 +684,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Rich Dad Poor Dad",
@@ -698,8 +698,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Intelligent Investor",
@@ -712,8 +712,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Your Money or Your Life",
@@ -726,8 +726,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Millionaire Next Door",
@@ -740,8 +740,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Die With Zero",
@@ -754,8 +754,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Total Money Makeover",
@@ -768,8 +768,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
 
   },
 
@@ -785,8 +785,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Influence: The Psychology of Persuasion",
@@ -799,8 +799,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Quiet",
@@ -813,8 +813,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Predictably Irrational",
@@ -827,8 +827,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Grit",
@@ -841,8 +841,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Flow",
@@ -855,8 +855,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Emotional Intelligence",
@@ -869,8 +869,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Blink",
@@ -883,8 +883,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "The Tipping Point",
@@ -897,8 +897,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
   },
   {
     "title": "Everything is F*cked",
@@ -911,8 +911,8 @@ BOOK_SEED = [
     "source_type": "pdf",
     "content_text": "Sample content...",
     "mime_type": "application/pdf",
-    "source_url": null,
-    "source_path": null
+    "source_url": None,
+    "source_path": None
     },
   # ----------technology
     {
@@ -926,8 +926,8 @@ BOOK_SEED = [
       "source_type": "pdf",
       "content_text": "Sample content...",
       "mime_type": "application/pdf",
-      "source_url": null,
-      "source_path": null
+      "source_url": None,
+      "source_path": None
     },
     {
       "title": "Clean Code",
@@ -940,8 +940,8 @@ BOOK_SEED = [
       "source_type": "pdf",
       "content_text": "Sample content...",
       "mime_type": "application/pdf",
-      "source_url": null,
-      "source_path": null
+      "source_url": None,
+      "source_path": None
     },
     {
         "title": "The Coming Wave",
@@ -954,8 +954,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Chip War",
@@ -968,8 +968,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "The Age of Surveillance Capitalism",
@@ -982,8 +982,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Life 3.0",
@@ -996,8 +996,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       # Science
       {
@@ -1011,8 +1011,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Astrophysics for People in a Hurry",
@@ -1025,8 +1025,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "The Selfish Gene",
@@ -1039,8 +1039,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "The Gene: An Intimate History",
@@ -1053,8 +1053,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "An Immense World",
@@ -1067,8 +1067,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       # Health
       {
@@ -1082,8 +1082,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Glucose Revolution",
@@ -1096,8 +1096,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Breath",
@@ -1110,8 +1110,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Why We Sleep",
@@ -1124,8 +1124,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
 
       # university catalogues
@@ -1140,8 +1140,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "University Teaching in Focus",
@@ -1154,8 +1154,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "General Education Essentials: A Guide for College Faculty",
@@ -1168,8 +1168,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Business Accounting",
@@ -1182,8 +1182,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Marketing Management",
@@ -1196,8 +1196,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Marketcing Management 14",
@@ -1210,8 +1210,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Principles of Management",
@@ -1224,8 +1224,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Economics",
@@ -1238,8 +1238,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Essential of Business Law 10th edition",
@@ -1252,8 +1252,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Chemistry: The Central Science 12th edition",
@@ -1266,8 +1266,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "University Physics Volume 1",
@@ -1280,8 +1280,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Biology",
@@ -1294,8 +1294,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Higher Engineering Mathematics 6th edition",
@@ -1308,8 +1308,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "A Textbook of Electrical Technology Volume 1",
@@ -1322,8 +1322,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Engineering Mechanics: Statics",
@@ -1336,8 +1336,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title":"Newnes Workshop Engineers pocket book",
@@ -1350,8 +1350,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Fluid Mechanics 4th edition",
@@ -1364,8 +1364,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Doing Qualitative Research 5th edition",
@@ -1378,8 +1378,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Everythings an Argument with Readings:Instructors Notes 4th edition",
@@ -1392,8 +1392,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "The Penguin Dictionary OF International Relations",
@@ -1406,8 +1406,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Socialogy 5th edition",
@@ -1420,8 +1420,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Operating System Concepts 8th edition",
@@ -1434,8 +1434,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Operating System Concepts 8th edition",
@@ -1448,8 +1448,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Data Communications & Networking 4th Edition",
@@ -1462,8 +1462,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Data Communications & Networking 5th Edition",
@@ -1476,8 +1476,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Java How To Program GUI 9th Edition",
@@ -1490,8 +1490,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Java How To Program GUI 4th Edition",
@@ -1504,8 +1504,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Java How To Program 10th Edition",
@@ -1518,8 +1518,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Database System Concepts 7th Edition",
@@ -1532,8 +1532,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Introduction to Philosophy",
@@ -1546,8 +1546,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "A short textbook of a Psychiatry 7th edition",
@@ -1560,8 +1560,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Semantics",
@@ -1574,8 +1574,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title":" Thomas Culculas 13th edition",
@@ -1588,8 +1588,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Linear Algebra and Its Applications 5th edition",
@@ -1602,8 +1602,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Linear Algebra and Its Applications 4th edition",
@@ -1616,8 +1616,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title":" An Introduction to Statistical Methods and Data Analysis 7th edition",
@@ -1630,8 +1630,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "An Introduction to Statistical Methods and Data Analysis 6th edition",
@@ -1644,8 +1644,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Elementary Differential Equations and Boundary Value Problems 7th edition",
@@ -1658,8 +1658,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Elementary Differential Equations and Boundary Value Problems 11th edition",
@@ -1672,8 +1672,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       },
       {
         "title": "Elementary Differential Equations and Boundary Value Problems 8th edition",
@@ -1686,8 +1686,8 @@ BOOK_SEED = [
         "source_type": "pdf",
         "content_text": "Sample content...",
         "mime_type": "application/pdf",
-        "source_url": null,
-        "source_path": null
+        "source_url": None,
+        "source_path": None
       }
 ]
 

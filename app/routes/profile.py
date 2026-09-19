@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
@@ -8,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
+from app.core.config import get_settings
 from app.core.security import get_current_user
 from app.models.book import Book
 from app.models.library_item import LibraryItem
@@ -21,7 +21,7 @@ from app.schemas.profile import (
     UserProfileRead,
     UserProfileUpdate,
 )
-from app.services.uploads import build_public_static_url
+from app.services.uploads import build_public_static_url, save_upload_file, validate_upload_file
 
 router = APIRouter(prefix="/profile", tags=["profile"])
 
@@ -303,12 +303,21 @@ async def upload_avatar(
             detail="Avatar must be PNG, JPEG, or WEBP",
         )
 
-    suffix = Path(avatar_file.filename or "avatar").suffix or ".jpg"
-    filename = f"{uuid4().hex}{suffix}"
-    destination = AVATAR_STORAGE_DIR / filename
+    settings = get_settings()
+    validate_upload_file(
+        avatar_file,
+        allowed_content_types={"image/png", "image/jpeg", "image/webp"},
+        max_size_mb=settings.max_avatar_upload_mb,
+        label="Avatar",
+    )
 
-    file_bytes = await avatar_file.read()
-    destination.write_bytes(file_bytes)
+    filename, destination = await save_upload_file(
+        avatar_file,
+        destination_dir=AVATAR_STORAGE_DIR,
+        fallback_filename="avatar.jpg",
+        max_size_mb=settings.max_avatar_upload_mb,
+        label="Avatar",
+    )
 
     avatar_url = build_public_static_url(f"/static/avatars/{filename}", request)
 

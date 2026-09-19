@@ -3,7 +3,6 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from pygments.lexer import default
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +10,13 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.library_item import LibraryItem
+
+
+# Archival vocabulary — kept as free-text/CSV columns (not lookup tables) to match
+# the existing genre_csv pattern in this codebase. Values are conventions, not
+# hard constraints, so admins are never blocked by an unrecognised term.
+ORIGINAL_FORMATS = {"born-digital", "printed", "manuscript", "oral-transcription"}
+RIGHTS_STATEMENTS = {"public-domain", "cc-by", "all-rights-reserved", "restricted"}
 
 
 class Book(Base):
@@ -32,7 +38,21 @@ class Book(Base):
     visibility: Mapped[str] = mapped_column(String(20), default="published")
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cover_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    is_featured: Mapped[bool] = mapped_column(Boolean, nullable =False, default=False)
+    is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+
+    # --- Archival / provenance metadata (the "Librarian archive shape") ---
+    accession_no: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True, index=True)
+    language: Mapped[str] = mapped_column(String(40), default="en")
+    subjects_csv: Mapped[str] = mapped_column(String(255), default="")
+    origin: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    era: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    original_format: Mapped[str] = mapped_column(String(30), default="born-digital")
+    rights_statement: Mapped[str] = mapped_column(String(30), default="all-rights-reserved")
+    condition_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    curator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    digitized_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    digitized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     library_items: Mapped[list["LibraryItem"]] = relationship(
         back_populates="book",
@@ -62,6 +82,19 @@ class Book(Base):
     @genre.setter
     def genre(self, values: list[str]) -> None:
         self.genres = values
+
+    @property
+    def subjects(self) -> list[str]:
+        return [s for s in self.subjects_csv.split(",") if s]
+
+    @subjects.setter
+    def subjects(self, values: list[str]) -> None:
+        self.subjects_csv = ",".join(v.strip() for v in values if v.strip())
+
+    @property
+    def is_archival_format(self) -> bool:
+        """True for anything that started life off-screen (manuscript, print, oral)."""
+        return self.original_format != "born-digital"
 
     @property
     def authors(self) -> list[str]:

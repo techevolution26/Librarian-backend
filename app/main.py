@@ -1,6 +1,5 @@
-import os
 from pathlib import Path
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -8,10 +7,27 @@ from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
 from app.routes import auth, books, library, profile, settings as settings_route, connections, circles
 from app.core.database import Base, engine
+from sqlalchemy import text
 
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name)
+app = FastAPI(
+    title=settings.app_name,
+    version="1.1.0",
+    description=(
+        "API for The Librarian — a community reading archive. Serves the web "
+        "app and, on the same endpoints/auth, the Expo mobile app."
+    ),
+    openapi_tags=[
+        {"name": "auth", "description": "Login, session, and current-user endpoints."},
+        {"name": "books", "description": "Public catalog, discovery/facets, admin catalog management."},
+        {"name": "library", "description": "A user's personal shelf and reading progress."},
+        {"name": "circles", "description": "Shared reading groups."},
+        {"name": "connections", "description": "Following/friending between users."},
+        {"name": "profile", "description": "The current user's profile."},
+        {"name": "settings", "description": "The current user's app settings."},
+    ],
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -24,7 +40,7 @@ app.add_middleware(
 ensure_storage_dirs()
 
 # Resolved the AssertionError by using pathlib.Path instead of fastapi.Path
-STORAGE_ROOT = Path(os.getenv("STORAGE_DIR", "./storage"))
+STORAGE_ROOT = Path(settings.storage_dir).expanduser().resolve()
 BOOK_STORAGE_DIR = STORAGE_ROOT / "books"
 AVATAR_STORAGE_DIR = STORAGE_ROOT / "avatars"
 
@@ -57,4 +73,10 @@ def root():
 
 @app.get("/health")
 def health():
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Database unavailable") from exc
+
     return {"status": "ok"}

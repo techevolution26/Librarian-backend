@@ -1,9 +1,31 @@
+import hashlib
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import HTTPException, Request, UploadFile
 
 from app.core.config import get_settings
+
+
+def compute_sha256(path: Path, chunk_size: int = 1024 * 1024) -> str:
+    """Hash a stored file so its integrity can be verified later — the same
+    "insurance against loss/corruption" idea behind archival checksums."""
+    digest = hashlib.sha256()
+
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(chunk_size)
+            if not chunk:
+                break
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+def generate_accession_no(prefix: str = "TL") -> str:
+    """A stable catalog/accession number, independent of the row's future
+    autoincrement id, in the spirit of an archive's catalog number."""
+    return f"{prefix}-{uuid4().hex[:8].upper()}"
 
 
 def build_public_static_url(path: str, request: Request) -> str:
@@ -45,15 +67,36 @@ async def save_upload_file(
 ) -> tuple[str, Path]:
     destination_dir.mkdir(parents=True, exist_ok=True)
 
-    suffix = Path(file.filename or fallback_filename).suffix or Path(
-        fallback_filename
-    ).suffix
+    suffix = Path(file.filename or fallback_filename).suffix.lower()
+    allowed_suffixes = {
+        "PDF": {".pdf"},
+        "Cover": {".png", ".jpg", ".jpeg", ".webp"},
+        "Avatar": {".png", ".jpg", ".jpeg", ".webp"},
+    }.get(label, {Path(fallback_filename).suffix.lower()})
+
+    if suffix not in allowed_suffixes:
+        suffix = Path(fallback_filename).suffix.lower()
 
     filename = f"{uuid4().hex}{suffix}"
     destination = destination_dir / filename
 
     max_size_bytes = max_size_mb * 1024 * 1024
     total_size = 0
+
+    signature = await file.read(16)
+    await file.seek(0)
+
+    if label == "PDF" and not signature.startswith(b"%PDF-"):
+        raise HTTPException(status_code=400, detail="PDF content signature is invalid")
+
+    if label in {"Cover", "Avatar"}:
+        valid_image = (
+            signature.startswith(b"\x89PNG\r\n\x1a\n")
+            or signature.startswith(b"\xff\xd8\xff")
+            or (signature.startswith(b"RIFF") and signature[8:12] == b"WEBP")
+        )
+        if not valid_image:
+            raise HTTPException(status_code=400, detail=f"{label} image content signature is invalid")
 
     with destination.open("wb") as output:
         while True:

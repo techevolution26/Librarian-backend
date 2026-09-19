@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from app.core.config import get_settings
 
 
 def get_storage_root() -> Path:
-    # Local default: ./storage
-    # Railway override: /app/storage
-    raw = os.getenv("STORAGE_DIR", "storage")
-    return Path(raw).expanduser().resolve()
+    settings = get_settings()
+    return Path(settings.storage_dir).expanduser().resolve()
 
 
 STORAGE_ROOT = get_storage_root()
