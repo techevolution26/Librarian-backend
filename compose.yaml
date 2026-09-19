@@ -8,9 +8,9 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - librarian_postgres_data:/var/lib/postgresql/data
+      - librarian_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-librarian} -d ${POSTGRES_DB:-librarian}"]
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-librarian} -d ${POSTGRES_DB:-librarian}" ]
       interval: 5s
       timeout: 5s
       retries: 10
