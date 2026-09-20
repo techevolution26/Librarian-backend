@@ -2,7 +2,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.models import Book
+from app.models import Book, Notification
 
 BOOK_SEED = [
   {
@@ -1739,45 +1739,310 @@ def apply_book_seed_data(book: Book, item: dict) -> None:
 
 
 def seed() -> None:
-    """
-    Seed only books.
+    """Create a realistic, repeatable development dataset.
 
-    This does not drop tables.
-    This does not recreate the database.
-    This does not recreate users.
-    Existing books are updated.
-    New books are inserted.
+    The seed is additive/idempotent: it updates the canonical books and creates
+    deterministic users, settings, library activity, connections and circles
+    without dropping tables or deleting developer data.
     """
+    from datetime import date, datetime, timedelta, timezone
 
-    created_count = 0
-    updated_count = 0
+    from app.core.security import hash_password
+    from app.models.circle import Circle
+    from app.models.circle_book import CircleBook
+    from app.models.circle_member import CircleMember
+    from app.models.circle_progress_update import CircleProgressUpdate
+    from app.models.admin_activity_log import AdminActivityLog
+    from app.models.library_item import LibraryItem
+    from app.models.user import User
+    from app.models.user_connection import UserConnection
+    from app.models.user_settings import UserSettings
+
+    password = "LibrarianDev!2026"
+    now = datetime.now(timezone.utc)
+
+    demo_users = [
+        {"full_name": "Librarian Admin", "email": "admin@librarian.local", "role": "ADMIN", "plan": "professional", "avatar_url": None},
+        {"full_name": "Demo Reader", "email": "reader@librarian.local", "role": "USER", "plan": "free", "avatar_url": None},
+        {"full_name": "Grace Mwangi", "email": "grace@librarian.local", "role": "USER", "plan": "professional", "avatar_url": None},
+        {"full_name": "Daniel Otieno", "email": "daniel@librarian.local", "role": "USER", "plan": "free", "avatar_url": None},
+        {"full_name": "Amina Hassan", "email": "amina@librarian.local", "role": "USER", "plan": "professional", "avatar_url": None},
+        {"full_name": "Samuel Kibet", "email": "samuel@librarian.local", "role": "USER", "plan": "free", "avatar_url": None},
+    ]
 
     with SessionLocal() as db:
-        db: Session
+        created_users = updated_users = 0
+        for item in demo_users:
+            user = db.scalar(select(User).where(User.email == item["email"]))
+            if user is None:
+                user = User(email=item["email"], password_hash=hash_password(password))
+                db.add(user)
+                created_users += 1
+            else:
+                updated_users += 1
+            user.full_name = item["full_name"]
+            user.role = item["role"]
+            user.plan = item["plan"]
+            user.avatar_url = item["avatar_url"]
+            user.is_active = True
 
+        db.flush()
+
+        users = {u.email: u for u in db.scalars(select(User)).all() if u.email.endswith("@librarian.local")}
+        admin = users["admin@librarian.local"]
+        reader = users["reader@librarian.local"]
+        grace = users["grace@librarian.local"]
+        daniel = users["daniel@librarian.local"]
+        amina = users["amina@librarian.local"]
+        samuel = users["samuel@librarian.local"]
+
+        created_books = updated_books = 0
         for item in BOOK_SEED:
             book = find_existing_book(db, item)
-
             if book is None:
                 book = Book()
-                apply_book_seed_data(book, item)
-                db.add(book)
-                created_count += 1
+                created_books += 1
             else:
-                apply_book_seed_data(book, item)
-                updated_count += 1
+                updated_books += 1
+            apply_book_seed_data(book, item)
+            book.visibility = "published"
+            book.archived_at = None
+            book.is_featured = False
+            book.language = "en"
+            book.original_format = "born-digital"
+            book.rights_statement = "all-rights-reserved"
+            db.add(book)
+
+        db.flush()
+        books = db.scalars(select(Book).order_by(Book.id)).all()
+        if not books:
+            raise RuntimeError("No books exist after seeding")
+
+        featured = next((b for b in books if b.title == "Mere Christianity"), books[0])
+        featured.is_featured = True
+
+        # Deterministic user preferences make recommendations and onboarding testable.
+        preference_map = {
+            reader.email: (["Christianity", "Faith"], ["Spiritual Growth", "Focused Reading"], ["Devotional", "Classic"], ["Medium books", "Deep books"], "5 books/week", True),
+            grace.email: (["Productivity", "Technology"], ["Career", "Deep Learning"], ["Practical", "Modern"], ["Medium books", "Deep books"], "3 books/week", True),
+            daniel.email: (["History", "Biography"], ["Knowledge", "Leadership"], ["Narrative"], ["Medium books"], "2 books/week", True),
+            amina.email: (["Christianity", "Psychology"], ["Spiritual Growth", "Personal Growth"], ["Devotional", "Reflective"], ["Short reads", "Medium books"], "4 books/week", True),
+            samuel.email: (["Productivity", "Science"], ["Learning", "Focus"], ["Practical"], ["Short reads", "Medium books"], "3 books/week", False),
+            admin.email: (["Archive", "History"], ["Research", "Discovery"], ["Scholarly"], ["Deep books"], "5 books/week", True),
+        }
+        for email, values in preference_map.items():
+            user = users[email]
+            settings = db.scalar(select(UserSettings).where(UserSettings.user_id == user.id))
+            if settings is None:
+                settings = UserSettings(user_id=user.id)
+            settings.theme = "dark"
+            settings.density = "comfortable"
+            settings.reading_mode = "scroll"
+            settings.font_size = "medium"
+            settings.line_height = "comfortable"
+            settings.auto_bookmark = True
+            settings.show_progress_bar = True
+            settings.email_updates = True
+            settings.reading_reminders = True
+            settings.product_announcements = email == admin.email
+            settings.profile_visibility = "friends" if email in {grace.email, amina.email} else "private"
+            settings.share_reading_activity = email in {reader.email, grace.email, amina.email}
+            settings.preferred_genres = values[0]
+            settings.reading_goals = values[1]
+            settings.content_styles = values[2]
+            settings.preferred_lengths = values[3]
+            settings.weekly_target = values[4]
+            settings.onboarding_completed = values[5]
+            db.add(settings)
+
+        # Library activity: saved, reading and finished states with realistic progress.
+        def upsert_library(user: User, book: Book, status: str, progress: int, current_page: int | None = None, bookmark_page: int | None = None, days_ago: int = 1) -> LibraryItem:
+            item = db.scalar(select(LibraryItem).where(LibraryItem.user_id == user.id, LibraryItem.book_id == book.id))
+            if item is None:
+                item = LibraryItem(user_id=user.id, book_id=book.id)
+            item.status = status
+            item.progress = progress
+            item.total_pages = book.pages
+            item.current_page = current_page
+            item.bookmark_page = bookmark_page
+            item.last_read_at = now - timedelta(days=days_ago) if status == "reading" else item.last_read_at
+            item.finished_at = now - timedelta(days=days_ago) if status == "finished" else None
+            db.add(item)
+            return item
+
+        picks = {
+            reader: [(0, "reading", 42), (1, "finished", 100), (6, "saved", 0), (15, "saved", 0), (20, "reading", 68)],
+            grace: [(10, "reading", 55), (11, "finished", 100), (2, "saved", 0), (17, "saved", 0)],
+            daniel: [(3, "finished", 100), (8, "reading", 31), (12, "saved", 0)],
+            amina: [(4, "reading", 76), (7, "finished", 100), (9, "saved", 0)],
+            samuel: [(10, "saved", 0), (14, "reading", 24), (18, "saved", 0)],
+            admin: [(0, "finished", 100), (5, "reading", 63), (9, "saved", 0)],
+        }
+        for user, rows in picks.items():
+            for idx, status, progress in rows:
+                if idx >= len(books):
+                    continue
+                book = books[idx]
+                page = max(1, round(book.pages * progress / 100)) if progress else None
+                upsert_library(user, book, status, progress, page, page, 2 if status == "reading" else 8)
+
+        # Accepted, pending and declined connection states.
+        connection_specs = [
+            (reader, grace, "accepted", "friend"),
+            (reader, daniel, "accepted", "mentor"),
+            (reader, amina, "pending", "friend"),
+            (samuel, reader, "pending", "school"),
+            (grace, samuel, "declined", "friend"),
+        ]
+        for requester, addressee, status, relationship_type in connection_specs:
+            row = db.scalar(select(UserConnection).where(UserConnection.requester_id == requester.id, UserConnection.addressee_id == addressee.id))
+            if row is None:
+                row = UserConnection(requester_id=requester.id, addressee_id=addressee.id)
+            row.status = status
+            row.relationship_type = relationship_type
+            db.add(row)
+
+        db.flush()
+
+        # Circles with owners, members, books and progress.
+        circle_specs = [
+            ("Deep Reading Circle", "deep-reading-circle", "A focused group for slow, thoughtful reading and weekly discussion.", "private", reader),
+            ("Faith & Formation", "faith-and-formation", "Shared reading around Christian faith, Scripture, spiritual formation and discipleship.", "private", grace),
+            ("Archive Explorers", "archive-explorers", "Discovering historical, cultural and scholarly works across the archive.", "public", admin),
+        ]
+        circles = {}
+        for name, slug, description, visibility, owner in circle_specs:
+            circle = db.scalar(select(Circle).where(Circle.slug == slug))
+            if circle is None:
+                circle = Circle(name=name, slug=slug, owner_id=owner.id)
+            circle.name = name
+            circle.description = description
+            circle.visibility = visibility
+            circle.owner_id = owner.id
+            circle.archived_at = None
+            db.add(circle)
+            db.flush()
+            circles[slug] = circle
+
+        member_specs = [
+            (circles["deep-reading-circle"], reader, "owner", reader),
+            (circles["deep-reading-circle"], grace, "member", reader),
+            (circles["deep-reading-circle"], daniel, "member", reader),
+            (circles["faith-and-formation"], grace, "owner", grace),
+            (circles["faith-and-formation"], reader, "member", grace),
+            (circles["faith-and-formation"], amina, "member", grace),
+            (circles["archive-explorers"], admin, "owner", admin),
+            (circles["archive-explorers"], reader, "member", admin),
+            (circles["archive-explorers"], daniel, "member", admin),
+            (circles["archive-explorers"], samuel, "member", admin),
+        ]
+        for circle, user, role, inviter in member_specs:
+            member = db.scalar(select(CircleMember).where(CircleMember.circle_id == circle.id, CircleMember.user_id == user.id))
+            if member is None:
+                member = CircleMember(circle_id=circle.id, user_id=user.id)
+            member.role = role
+            member.status = "active"
+            member.invited_by_user_id = None if user.id == circle.owner_id else inviter.id
+            member.joined_at = now - timedelta(days=14 if role == "owner" else 7)
+            db.add(member)
+
+        db.flush()
+        circle_book_specs = [
+            ("deep-reading-circle", 0, "A four-week deep reading of Lewis.", 21),
+            ("deep-reading-circle", 1, "A practical follow-up read.", 14),
+            ("faith-and-formation", 2, "Reading toward a deeper life with God.", 28),
+            ("faith-and-formation", 8, "Exploring the heart of Christ.", 21),
+            ("archive-explorers", 3, "Evidence, history and primary-source thinking.", 30),
+            ("archive-explorers", 10, "A productivity classic for focused work.", 21),
+        ]
+        circle_books = []
+        for slug, idx, description, duration in circle_book_specs:
+            if idx >= len(books):
+                continue
+            circle = circles[slug]
+            book = books[idx]
+            row = db.scalar(select(CircleBook).where(CircleBook.circle_id == circle.id, CircleBook.book_id == book.id))
+            if row is None:
+                row = CircleBook(circle_id=circle.id, book_id=book.id, created_by_user_id=circle.owner_id)
+            row.description = description
+            row.start_date = date.today() - timedelta(days=7)
+            row.target_end_date = date.today() + timedelta(days=duration)
+            row.status = "active"
+            db.add(row)
+            db.flush()
+            circle_books.append(row)
+
+        # Progress events intentionally create a timeline, useful for the circle UI.
+        for row in circle_books:
+            existing = db.scalar(select(CircleProgressUpdate).where(CircleProgressUpdate.circle_book_id == row.id, CircleProgressUpdate.user_id == reader.id))
+            if existing is None:
+                library_item = db.scalar(select(LibraryItem).where(LibraryItem.user_id == reader.id, LibraryItem.book_id == row.book_id))
+                if library_item:
+                    db.add(CircleProgressUpdate(
+                        circle_id=row.circle_id,
+                        circle_book_id=row.id,
+                        user_id=reader.id,
+                        library_item_id=library_item.id,
+                        progress_percent=min(library_item.progress, 100),
+                        current_page=library_item.current_page,
+                        bookmark_page=library_item.bookmark_page,
+                        note="Making steady progress — sharing this update with the circle.",
+                        visibility="circle",
+                        created_at=now - timedelta(days=1),
+                    ))
+
+        # A small admin activity trail makes the admin dashboard useful immediately.
+        actions = [
+            ("seed.dataset_created", "dataset", None),
+            ("book.featured", "book", featured.id),
+            ("circle.created", "circle", circles["deep-reading-circle"].id),
+            ("circle.created", "circle", circles["archive-explorers"].id),
+        ]
+        for action, entity_type, entity_id in actions:
+            exists = db.scalar(select(AdminActivityLog).where(AdminActivityLog.action == action, AdminActivityLog.entity_type == entity_type, AdminActivityLog.entity_id == entity_id))
+            if exists is None:
+                db.add(AdminActivityLog(admin_user_id=admin.id, action=action, entity_type=entity_type, entity_id=entity_id, metadata_json={"source": "seed_db"}))
+
+        # Notification inbox state makes realtime/mobile testing meaningful immediately.
+        notification_specs = [
+            (reader, "connection.request", "New connection request", "Amina Hassan wants to connect with you.", {"connection_id": None, "user_id": amina.id}, False),
+            (reader, "circle.activity", "Deep Reading Circle", "Your circle has new reading activity around Mere Christianity.", {"circle_slug": "deep-reading-circle"}, False),
+            (reader, "reading.reminder", "Keep your reading momentum", "You have books in progress waiting for you.", {"route": "/library"}, True),
+            (grace, "connection.accepted", "Connection accepted", "John Reader accepted your connection request.", {"user_id": reader.id}, False),
+            (grace, "circle.activity", "Faith & Formation", "Your circle has an active reading discussion.", {"circle_slug": "faith-and-formation"}, False),
+            (amina, "circle.invite", "Circle invitation", "Grace Reader added you to Faith & Formation.", {"circle_slug": "faith-and-formation"}, False),
+            (admin, "system.info", "Development environment ready", "The Librarian development dataset has been seeded successfully.", {"source": "seed_db"}, True),
+        ]
+        for user, type_, title, body, data, is_read in notification_specs:
+            exists = db.scalar(select(Notification).where(
+                Notification.user_id == user.id,
+                Notification.type == type_,
+                Notification.title == title,
+            ))
+            if exists is None:
+                db.add(Notification(
+                    user_id=user.id,
+                    type=type_,
+                    title=title,
+                    body=body,
+                    data_json=data,
+                    read_at=now - timedelta(days=1) if is_read else None,
+                    created_at=now - timedelta(hours=6),
+                ))
 
         db.commit()
 
-        books_count = db.execute(
-            text("SELECT COUNT(*) AS count FROM books")
-        ).scalar_one()
+        counts = {}
+        for table in ["users", "books", "library_items", "user_connections", "circles", "circle_members", "circle_books", "circle_progress_updates", "user_settings", "admin_activity_logs", "notifications"]:
+            counts[table] = db.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar_one()
 
         print("Database connection confirmed")
-        print("Seed complete")
-        print(f"Created books: {created_count}")
-        print(f"Updated books: {updated_count}")
-        print(f"Total books in database: {books_count}")
+        print("Powerful development seed complete")
+        print(f"Demo login password: {password}")
+        print(f"Created users: {created_users}; existing users reused: {updated_users}")
+        print(f"Created books: {created_books}; updated books: {updated_books}")
+        for table, count in counts.items():
+            print(f"{table}: {count}")
 
 
 if __name__ == "__main__":

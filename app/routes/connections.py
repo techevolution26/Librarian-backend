@@ -6,6 +6,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
 from app.models.user_connection import UserConnection
+from app.services.notifications import create_notification
 from app.schemas.connections import (
     ConnectionUserRead,
     UserConnectionAction,
@@ -81,6 +82,14 @@ def invite_connection(
         status="pending",
     )
     db.add(row)
+    create_notification(
+        db,
+        user_id=target.id,
+        type="connection.request",
+        title="New connection request",
+        body=f"{current_user.full_name} wants to connect with you.",
+        data={"connection_id": row.id, "user_id": current_user.id},
+    )
     db.commit()
     db.refresh(row)
     return serialize_connection(row)
@@ -101,10 +110,26 @@ def connection_action(
       if row.addressee_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed to accept")
       row.status = "accepted"
+      create_notification(
+          db,
+          user_id=row.requester_id,
+          type="connection.accepted",
+          title="Connection accepted",
+          body=f"{current_user.full_name} accepted your connection request.",
+          data={"connection_id": row.id, "user_id": current_user.id},
+      )
     elif payload.action == "decline":
       if row.addressee_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not allowed to decline")
       row.status = "declined"
+      create_notification(
+          db,
+          user_id=row.requester_id,
+          type="connection.declined",
+          title="Connection request declined",
+          body=f"{current_user.full_name} declined your connection request.",
+          data={"connection_id": row.id, "user_id": current_user.id},
+      )
     elif payload.action == "block":
       if current_user.id not in {row.requester_id, row.addressee_id}:
         raise HTTPException(status_code=403, detail="Not allowed to block")

@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
-from app.routes import auth, books, library, profile, settings as settings_route, connections, circles
+from app.routes import auth, books, library, profile, settings as settings_route, connections, circles, notifications
 from app.core.database import Base, engine
 from sqlalchemy import text
 
@@ -26,6 +26,7 @@ app = FastAPI(
         {"name": "connections", "description": "Following/friending between users."},
         {"name": "profile", "description": "The current user's profile."},
         {"name": "settings", "description": "The current user's app settings."},
+        {"name": "notifications", "description": "Realtime and persisted in-app notifications."},
     ],
 )
 
@@ -62,6 +63,7 @@ app.include_router(profile.router)
 app.include_router(settings_route.router)
 app.include_router(connections.router)
 app.include_router(circles.router)
+app.include_router(notifications.router)
 
 # @app.on_event("startup")
 # def startup():

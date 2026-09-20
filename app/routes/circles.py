@@ -28,6 +28,7 @@ from app.schemas.circles import (
     CircleUpdate,
 )
 from app.models.library_item import LibraryItem
+from app.services.notifications import create_notification
 
 
 
@@ -230,6 +231,14 @@ def invite_circle_member(
     )
 
     db.add(row)
+    create_notification(
+        db,
+        user_id=target.id,
+        type="circle.invite",
+        title="Circle invitation",
+        body=f"{current_user.full_name} added you to {circle.name}.",
+        data={"circle_id": circle.id, "circle_slug": circle.slug, "invited_by": current_user.id},
+    )
     db.commit()
     db.refresh(row)
 

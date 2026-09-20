@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:18-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-librarian}
       POSTGRES_USER: ${POSTGRES_USER:-librarian}
@@ -8,9 +9,11 @@ services:
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
+      # PostgreSQL 18 expects the parent mount so it can manage the
+      # major-version-specific data directory itself.
       - librarian_postgres_data:/var/lib/postgresql
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-librarian} -d ${POSTGRES_DB:-librarian}" ]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-librarian} -d ${POSTGRES_DB:-librarian}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -19,6 +22,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-librarian}:${POSTGRES_PASSWORD:-librarian_dev_password}@db:5432/${POSTGRES_DB:-librarian}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000","http://127.0.0.1:3000","http://localhost:8081","http://127.0.0.1:8081"]}
@@ -39,10 +43,13 @@ services:
         condition: service_healthy
     command: >
       sh -c "alembic upgrade head &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8000"
     develop:
       watch:
-        - action: sync
+        # Compose Watch owns development reloads. Using sync+restart here
+        # avoids Compose Watch + Uvicorn --reload producing duplicate reload
+        # messages and whole-tree WatchFiles warnings on initial sync.
+        - action: sync+restart
           path: ./app
           target: /app/app
           initial_sync: true

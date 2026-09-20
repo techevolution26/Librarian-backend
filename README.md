@@ -35,3 +35,8 @@ replicas.
 
 Never commit `.env`, database credentials, or JWT secrets. Generate a new
 `SECRET_KEY` for each environment.
+
+
+### Realtime notifications
+
+The API now persists in-app notifications and delivers new events over a WebSocket. The Expo client subscribes when authenticated, keeps the bell badge live, and polls every 15 seconds as a resilience fallback.
