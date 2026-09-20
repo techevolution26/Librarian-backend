@@ -3,12 +3,26 @@ import math
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile ,Query
-from sqlalchemy import select, case, func ,or_
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    Query,
+)
+from sqlalchemy import select, case, func, or_
 from sqlalchemy.orm import Session
 from app.models.library_item import LibraryItem
 from app.core.database import get_db
-from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
+from app.core.storage import (
+    BOOKS_STORAGE_DIR,
+    COVERS_STORAGE_DIR,
+    build_public_file_url,
+    ensure_storage_dirs,
+)
 from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
 from app.models.user import User
@@ -69,13 +83,13 @@ def to_resource_read(row: Book) -> BookRead:
 
 to_book_read = to_resource_read
 
+
 def public_books_stmt():
     return (
         select(Book)
         .where(Book.archived_at.is_(None))
         .where(Book.visibility == "published")
     )
-
 
 
 @router.get("/admin/list", response_model=AdminBookListRead)
@@ -119,9 +133,7 @@ def admin_list_books(
     safe_page = min(page, pages)
     offset = (safe_page - 1) * limit
 
-    rows = db.scalars(
-        stmt.order_by(Book.id.desc()).offset(offset).limit(limit)
-    ).all()
+    rows = db.scalars(stmt.order_by(Book.id.desc()).offset(offset).limit(limit)).all()
 
     return AdminBookListRead(
         items=[to_book_read(row) for row in rows],
@@ -160,7 +172,6 @@ def list_admin_activity(
     ]
 
 
-
 @router.get("/admin/{book_id}", response_model=BookRead)
 def admin_get_book(
     book_id: int,
@@ -175,7 +186,6 @@ def admin_get_book(
         raise HTTPException(status_code=404, detail="Book not found")
 
     return to_book_read(row)
-
 
 
 @router.get("/featured", response_model=BookRead)
@@ -212,8 +222,7 @@ def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
         public_books_stmt()
         .outerjoin(
             LibraryItem,
-            (LibraryItem.book_id == Book.id)
-            & (LibraryItem.updated_at >= since),
+            (LibraryItem.book_id == Book.id) & (LibraryItem.updated_at >= since),
         )
         .group_by(Book.id)
         .order_by(
@@ -258,8 +267,7 @@ def list_trending_books(
         public_books_stmt()
         .outerjoin(
             LibraryItem,
-            (LibraryItem.book_id == Book.id)
-            & (LibraryItem.updated_at >= since),
+            (LibraryItem.book_id == Book.id) & (LibraryItem.updated_at >= since),
         )
         .group_by(Book.id)
         .order_by(trending_score.desc(), Book.rating.desc(), Book.id.desc())
@@ -267,6 +275,131 @@ def list_trending_books(
     ).all()
 
     return [to_book_read(row) for row in rows]
+
+
+@router.get("/recommended", response_model=list[BookRead])
+def recommended_books(
+    limit: int = Query(default=12, ge=1, le=50),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[BookRead]:
+    """Return deterministic, explainable recommendations from user taste + behavior.
+
+    This is intentionally a ranking system, not an ML claim. Explicit onboarding
+    preferences provide the strongest signal; the user's reading behavior and
+    archive-wide engagement provide smaller supporting signals. Books already in
+    the user's library are excluded.
+    """
+    settings = current_user.settings
+    preferred_genres = (
+        {value.strip().lower() for value in (settings.preferred_genres or [])}
+        if settings
+        else set()
+    )
+    goals = (
+        {value.strip().lower() for value in (settings.reading_goals or [])}
+        if settings
+        else set()
+    )
+    styles = (
+        {value.strip().lower() for value in (settings.content_styles or [])}
+        if settings
+        else set()
+    )
+    lengths = (
+        {value.strip().lower() for value in (settings.preferred_lengths or [])}
+        if settings
+        else set()
+    )
+
+    library_rows = db.scalars(
+        select(LibraryItem).where(LibraryItem.user_id == current_user.id)
+    ).all()
+    library_ids = {row.book_id for row in library_rows}
+
+    # Reading behavior is used as evidence about the kinds of books the user
+    # actually engages with. Finished > reading > saved, but all are modest.
+    behavior_genres: dict[str, float] = {}
+    for row in library_rows:
+        book = db.get(Book, row.book_id)
+        if not book:
+            continue
+        weight = {"finished": 3.0, "reading": 2.0, "saved": 1.0}.get(row.status, 0.5)
+        for genre in book.genres:
+            key = genre.strip().lower()
+            if key:
+                behavior_genres[key] = behavior_genres.get(key, 0.0) + weight
+
+    candidates = db.scalars(public_books_stmt()).all()
+    if not candidates:
+        return []
+
+    # Archive-wide popularity is deliberately a tie-break/supporting signal.
+    library_counts = dict(
+        db.query(LibraryItem.book_id, func.count(LibraryItem.id))
+        .group_by(LibraryItem.book_id)
+        .all()
+    )
+
+    def length_matches(book: Book) -> float:
+        pages = book.pages or 0
+        if not lengths:
+            return 0.0
+        score = 0.0
+        for value in lengths:
+            if "short" in value and pages <= 180:
+                score += 1.0
+            elif "medium" in value and 180 < pages <= 350:
+                score += 1.0
+            elif "deep" in value and pages > 350:
+                score += 1.0
+        return score
+
+    def text_matches(book: Book, vocabulary: set[str]) -> float:
+        if not vocabulary:
+            return 0.0
+        haystack = " ".join(
+            [
+                book.title,
+                book.description,
+                *book.genres,
+                *book.tags,
+                *book.subjects,
+            ]
+        ).lower()
+        return sum(1.0 for value in vocabulary if value and value in haystack)
+
+    scored: list[tuple[float, Book]] = []
+    for book in candidates:
+        if book.id in library_ids:
+            continue
+
+        genres = {value.strip().lower() for value in book.genres}
+        explicit_genre = len(genres & preferred_genres)
+        behavior_score = sum(behavior_genres.get(genre, 0.0) for genre in genres)
+        goal_score = text_matches(book, goals)
+        style_score = text_matches(book, styles)
+        length_score = length_matches(book)
+        popularity = min(float(library_counts.get(book.id, 0)), 10.0)
+        rating = float(book.rating or 0.0)
+        featured = 1.0 if getattr(book, "is_featured", False) else 0.0
+
+        score = (
+            explicit_genre * 12.0
+            + behavior_score * 2.0
+            + goal_score * 4.0
+            + style_score * 3.0
+            + length_score * 3.0
+            + popularity * 0.5
+            + rating * 0.4
+            + featured * 0.5
+        )
+        scored.append((score, book))
+
+    scored.sort(
+        key=lambda item: (item[0], item[1].rating or 0, item[1].id), reverse=True
+    )
+    return [to_book_read(book) for _, book in scored[:limit]]
 
 
 @router.get("/discover", response_model=list[BookRead])
@@ -344,7 +477,6 @@ def discover_books(
     return [to_book_read(row) for row in rows]
 
 
-
 @router.get("/genres", response_model=list[str])
 def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
     rows = db.scalars(select(Book)).all()
@@ -390,18 +522,14 @@ def list_book_facets(db: Session = Depends(get_db)) -> BookFacets:
 
 @router.get("/", response_model=list[BookRead])
 def list_books(db: Session = Depends(get_db)) -> list[BookRead]:
-    rows = db.scalars(
-        public_books_stmt().order_by(Book.id.desc())
-    ).all()
+    rows = db.scalars(public_books_stmt().order_by(Book.id.desc())).all()
 
     return [to_book_read(row) for row in rows]
 
 
 @router.get("/{book_id}", response_model=BookRead)
 def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
-    row = db.scalar(
-        public_books_stmt().where(Book.id == book_id)
-    )
+    row = db.scalar(public_books_stmt().where(Book.id == book_id))
 
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -426,7 +554,9 @@ def set_featured_book(
         raise HTTPException(status_code=400, detail="Archived books cannot be featured")
 
     if book.visibility != "published":
-        raise HTTPException(status_code=400, detail="Only published books can be featured")
+        raise HTTPException(
+            status_code=400, detail="Only published books can be featured"
+        )
 
     db.query(Book).update({Book.is_featured: False})
     book.is_featured = True
@@ -482,13 +612,11 @@ def discover_stats(
     genre: str = "All",
     db: Session = Depends(get_db),
 ) -> dict[str, int]:
-    rows = discover_books(q=q, genre=genre, sort="recommended", limit=100, offset=0, db=db)
+    rows = discover_books(
+        q=q, genre=genre, sort="recommended", limit=100, offset=0, db=db
+    )
 
-    categories = {
-        genre_item
-        for book in rows
-        for genre_item in book.genre
-    }
+    categories = {genre_item for book in rows for genre_item in book.genre}
 
     return {
         "visible_books": len(rows),
@@ -500,9 +628,7 @@ def discover_stats(
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
 def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContentRead:
-    row = db.scalar(
-        public_books_stmt().where(Book.id == book_id)
-    )
+    row = db.scalar(public_books_stmt().where(Book.id == book_id))
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -515,8 +641,6 @@ def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContent
         source_url=row.source_url,
         content_text=row.content_text,
     )
-
-
 
 
 @router.post("/upload-pdf", response_model=BookRead, status_code=201)
@@ -767,8 +891,6 @@ def update_book_metadata(
     return to_resource_read(book)
 
 
-
-
 @router.post("/{book_id}/cover", response_model=BookRead)
 async def upload_book_cover(
     request: Request,
@@ -821,7 +943,6 @@ async def upload_book_cover(
     return to_book_read(book)
 
 
-
 @router.patch("/{book_id}/archive", response_model=BookRead)
 def archive_book(
     book_id: int,
@@ -850,7 +971,6 @@ def archive_book(
     db.refresh(book)
 
     return to_book_read(book)
-
 
 
 @router.patch("/{book_id}/restore", response_model=BookRead)
