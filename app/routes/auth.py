@@ -33,6 +33,12 @@ def build_default_user_settings(user_id: int) -> UserSettings:
         product_announcements=False,
         profile_visibility="private",
         share_reading_activity=False,
+        preferred_genres=[],
+        reading_goals=[],
+        content_styles=[],
+        preferred_lengths=[],
+        weekly_target=None,
+        onboarding_completed=False,
     )
 
 
