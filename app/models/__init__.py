@@ -1,5 +1,6 @@
 from app.models.admin_activity_log import AdminActivityLog
 from app.models.book import Book
+from app.models.book_asset import BookAsset
 from app.models.circle import Circle
 from app.models.circle_book import CircleBook
 from app.models.circle_member import CircleMember
@@ -13,6 +14,7 @@ from app.models.user_settings import UserSettings
 __all__ = [
     "User",
     "Book",
+    "BookAsset",
     "LibraryItem",
     "UserSettings",
     "AdminActivityLog",

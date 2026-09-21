@@ -40,3 +40,9 @@ Never commit `.env`, database credentials, or JWT secrets. Generate a new
 ### Realtime notifications
 
 The API now persists in-app notifications and delivers new events over a WebSocket. The Expo client subscribes when authenticated, keeps the bell badge live, and polls every 15 seconds as a resilience fallback.
+
+## Digital archive ingestion
+
+Admin ingestion is draft-first. A PDF upload creates a catalog record and a versioned `BookAsset`; cover uploads and PDF replacements create additional asset versions without deleting the previous stored object. A separate `PATCH /books/{book_id}/publish` operation moves a valid, active record into the public catalog. Public book/content endpoints only expose published, non-archived records.
+
+The current development storage backend is the mounted local `storage/` volume. The asset model stores stable storage keys, checksums, versions, MIME types, sizes, uploader identity, and current-asset state so the storage implementation can later move to durable object storage without changing the catalog contract.

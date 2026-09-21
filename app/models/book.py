@@ -10,6 +10,7 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.library_item import LibraryItem
+    from app.models.book_asset import BookAsset
 
 
 # Archival vocabulary — kept as free-text/CSV columns (not lookup tables) to match
@@ -53,6 +54,12 @@ class Book(Base):
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     digitized_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     digitized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    assets: Mapped[list["BookAsset"]] = relationship(
+        back_populates="book",
+        cascade="all, delete-orphan",
+        order_by="BookAsset.created_at.desc()",
+    )
 
     library_items: Mapped[list["LibraryItem"]] = relationship(
         back_populates="book",

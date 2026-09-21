@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="900" viewBox="0 0 600 900">
+  <rect width="600" height="900" fill="#101417"/>
+  <rect x="36" y="36" width="528" height="828" rx="24" fill="#151c20" stroke="#52636d" stroke-width="2"/>
+  <path d="M150 190h300M150 250h220M150 310h260" stroke="#80939e" stroke-width="14" stroke-linecap="round" opacity=".65"/>
+  <text x="300" y="500" text-anchor="middle" fill="#d7e0e4" font-family="sans-serif" font-size="48" font-weight="700">THE</text>
+  <text x="300" y="560" text-anchor="middle" fill="#d7e0e4" font-family="sans-serif" font-size="58" font-weight="700">LIBRARIAN</text>
+  <text x="300" y="620" text-anchor="middle" fill="#80939e" font-family="sans-serif" font-size="24">DIGITAL ARCHIVE</text>
+</svg>

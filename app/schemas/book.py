@@ -2,6 +2,21 @@ from pydantic import BaseModel, ConfigDict
 from datetime import datetime
 
 
+class BookAssetRead(BaseModel):
+    id: int
+    asset_type: str
+    version: int
+    original_filename: str
+    public_url: str
+    mime_type: str
+    size_bytes: int
+    checksum_sha256: str
+    is_current: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResourceRead(BaseModel):
     id: int
     title: str
@@ -35,6 +50,7 @@ class ResourceRead(BaseModel):
     checksum_sha256: str | None = None
     digitized_by: str | None = None
     digitized_at: datetime | None = None
+    assets: list[BookAssetRead] = []
 
     model_config = ConfigDict(from_attributes=True)
 

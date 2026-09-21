@@ -42,6 +42,7 @@ ensure_storage_dirs()
 
 # Resolved the AssertionError by using pathlib.Path instead of fastapi.Path
 STORAGE_ROOT = Path(settings.storage_dir).expanduser().resolve()
+STATIC_ASSET_DIR = Path(__file__).resolve().parent / "static"
 BOOK_STORAGE_DIR = STORAGE_ROOT / "books"
 AVATAR_STORAGE_DIR = STORAGE_ROOT / "avatars"
 
@@ -54,6 +55,7 @@ COVERS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static/books", StaticFiles(directory=BOOK_STORAGE_DIR), name="book-files")
 app.mount("/static/avatars", StaticFiles(directory=AVATAR_STORAGE_DIR), name="avatar-files")
 app.mount("/static/covers", StaticFiles(directory=COVERS_STORAGE_DIR), name="cover-files")
+app.mount("/static/assets", StaticFiles(directory=STATIC_ASSET_DIR), name="static-assets")
 
 # Include Routers
 app.include_router(auth.router)
