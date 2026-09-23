@@ -297,11 +297,6 @@ async def upload_avatar(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> UserProfileRead:
-    if avatar_file.content_type not in {"image/png", "image/jpeg", "image/webp"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Avatar must be PNG, JPEG, or WEBP",
-        )
 
     settings = get_settings()
     validate_upload_file(

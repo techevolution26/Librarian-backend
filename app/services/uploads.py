@@ -43,7 +43,13 @@ def validate_upload_file(
     max_size_mb: int,
     label: str,
 ) -> None:
-    if file.content_type not in allowed_content_types:
+    content_type = (file.content_type or "").lower().strip()
+    generic_types = {"", "application/octet-stream", "binary/octet-stream"}
+
+    # Native mobile multipart implementations may omit the MIME type or send
+    # application/octet-stream. The content signature is validated separately
+    # by save_upload_file, so MIME remains advisory here.
+    if content_type not in allowed_content_types and content_type not in generic_types:
         raise HTTPException(
             status_code=400,
             detail=f"{label} file type is not supported",
@@ -57,6 +63,20 @@ def validate_upload_file(
             detail=f"{label} file is too large. Maximum allowed size is {max_size_mb}MB.",
         )
 
+
+
+
+def canonical_content_type(label: str, suffix: str) -> str:
+    if label == "PDF":
+        return "application/pdf"
+    if label in {"Cover", "Avatar"}:
+        return {
+            ".png": "image/png",
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".webp": "image/webp",
+        }.get(suffix, "application/octet-stream")
+    return "application/octet-stream"
 
 async def save_upload_file(
     file: UploadFile,
