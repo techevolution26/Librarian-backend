@@ -11,6 +11,7 @@ from app.schemas.archival_rights import ArchivalRightsRead, ArchivalRightsUpdate
 class ArchivalObjectRead(BaseModel):
     id: int
     identifier: str
+    persistent_identifier: str
     object_type: str
     title: str
     description: str | None = None

@@ -13,7 +13,11 @@ from app.models.archival_provenance import ArchivalProvenance
 from app.models.archival_rights import ArchivalRights
 from app.models.collection import Collection
 from app.models.user import User
-from app.schemas.archival_object import ArchivalObjectCreate, ArchivalObjectRead, ArchivalObjectUpdate
+from app.schemas.archival_object import (
+    ArchivalObjectCreate,
+    ArchivalObjectRead,
+    ArchivalObjectUpdate,
+)
 
 router = APIRouter(prefix="/archival-objects", tags=["archival-objects"])
 
@@ -22,6 +26,7 @@ def _read(row: ArchivalObject) -> ArchivalObjectRead:
     return ArchivalObjectRead(
         id=row.id,
         identifier=row.identifier,
+        persistent_identifier=row.persistent_identifier,
         object_type=row.object_type,
         title=row.title,
         description=row.description,
@@ -56,10 +61,16 @@ def create_archival_object(
 ) -> ArchivalObjectRead:
     require_admin_user(current_user)
 
-    if db.scalar(select(ArchivalObject).where(ArchivalObject.identifier == payload.identifier)):
-        raise HTTPException(status_code=409, detail="Archival object identifier already exists")
+    if db.scalar(
+        select(ArchivalObject).where(ArchivalObject.identifier == payload.identifier)
+    ):
+        raise HTTPException(
+            status_code=409, detail="Archival object identifier already exists"
+        )
     if payload.collection_id is not None and not db.scalar(
-        select(Collection).where(Collection.id == payload.collection_id, Collection.archived_at.is_(None))
+        select(Collection).where(
+            Collection.id == payload.collection_id, Collection.archived_at.is_(None)
+        )
     ):
         raise HTTPException(status_code=404, detail="Collection not found")
 
@@ -90,7 +101,9 @@ def admin_list_archival_objects(
 ) -> list[ArchivalObjectRead]:
     require_admin_user(current_user)
     rows = db.scalars(
-        select(ArchivalObject).order_by(ArchivalObject.updated_at.desc(), ArchivalObject.id.desc())
+        select(ArchivalObject).order_by(
+            ArchivalObject.updated_at.desc(), ArchivalObject.id.desc()
+        )
     ).all()
     return [_read(row) for row in rows]
 
@@ -119,7 +132,9 @@ def update_archival_object(
                 ArchivalObject.id != object_id,
             )
         ):
-            raise HTTPException(status_code=409, detail="Archival object identifier already exists")
+            raise HTTPException(
+                status_code=409, detail="Archival object identifier already exists"
+            )
         updates["identifier"] = identifier
     if "title" in updates:
         updates["title"] = updates["title"].strip()
@@ -137,14 +152,18 @@ def update_archival_object(
 
     if metadata_payload is not None:
         if row.intellectual_metadata is None:
-            row.intellectual_metadata = ArchivalMetadata(archival_object=row, **metadata_payload)
+            row.intellectual_metadata = ArchivalMetadata(
+                archival_object=row, **metadata_payload
+            )
         else:
             for field, value in metadata_payload.items():
                 setattr(row.intellectual_metadata, field, value)
 
     if provenance_payload is not None:
         if row.provenance is None:
-            row.provenance = ArchivalProvenance(archival_object=row, **provenance_payload)
+            row.provenance = ArchivalProvenance(
+                archival_object=row, **provenance_payload
+            )
         else:
             for field, value in provenance_payload.items():
                 setattr(row.provenance, field, value)
@@ -178,8 +197,26 @@ def archive_archival_object(
     return _read(row)
 
 
+@router.get("/pid/{persistent_identifier}", response_model=ArchivalObjectRead)
+def get_archival_object_by_persistent_identifier(
+    persistent_identifier: str, db: Session = Depends(get_db)
+) -> ArchivalObjectRead:
+    row = db.scalar(
+        select(ArchivalObject).where(
+            ArchivalObject.persistent_identifier == persistent_identifier,
+            ArchivalObject.archived_at.is_(None),
+            ArchivalObject.visibility == "published",
+        )
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Archival object not found")
+    return _read(row)
+
+
 @router.get("/{object_id}", response_model=ArchivalObjectRead)
-def get_archival_object(object_id: int, db: Session = Depends(get_db)) -> ArchivalObjectRead:
+def get_archival_object(
+    object_id: int, db: Session = Depends(get_db)
+) -> ArchivalObjectRead:
     row = db.scalar(
         select(ArchivalObject).where(
             ArchivalObject.id == object_id,
