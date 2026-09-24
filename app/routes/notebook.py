@@ -39,9 +39,7 @@ def get_or_create_notebook(db: Session, user_id: int) -> Notebook:
 
 def get_owned_note(db: Session, note_id: int, user_id: int) -> Note:
     note = db.scalar(
-        select(Note)
-        .join(Notebook)
-        .where(Note.id == note_id, Notebook.user_id == user_id)
+        select(Note).join(Notebook).where(Note.id == note_id, Notebook.user_id == user_id)
     )
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
@@ -55,31 +53,21 @@ def validate_note_links(
     bookmark_id: int | None,
 ) -> None:
     if bookmark_id is not None:
-        bookmark = db.scalar(
-            select(Bookmark).where(
-                Bookmark.id == bookmark_id, Bookmark.user_id == user_id
-            )
-        )
+        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id))
         if not bookmark:
             raise HTTPException(status_code=404, detail="Bookmark not found")
         if book_id is not None and bookmark.book_id != book_id:
-            raise HTTPException(
-                status_code=400, detail="Bookmark does not belong to this book"
-            )
+            raise HTTPException(status_code=400, detail="Bookmark does not belong to this book")
         book_id = bookmark.book_id
 
     if book_id is not None:
-        book = db.scalar(
-            select(Book).where(Book.id == book_id, Book.archived_at.is_(None))
-        )
+        book = db.scalar(select(Book).where(Book.id == book_id, Book.archived_at.is_(None)))
         if not book:
             raise HTTPException(status_code=404, detail="Book not found")
 
 
 @router.get("", response_model=NotebookRead)
-def get_notebook(
-    db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
-) -> NotebookRead:
+def get_notebook(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> NotebookRead:
     return NotebookRead.model_validate(get_or_create_notebook(db, current_user.id))
 
 
@@ -138,11 +126,7 @@ def create_note(
         body=payload.body,
     )
     if payload.bookmark_id is not None:
-        bookmark = db.scalar(
-            select(Bookmark).where(
-                Bookmark.id == payload.bookmark_id, Bookmark.user_id == current_user.id
-            )
-        )
+        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == payload.bookmark_id, Bookmark.user_id == current_user.id))
         if bookmark:
             note.book_id = bookmark.book_id
             note.page_number = note.page_number or bookmark.page_number
@@ -150,6 +134,15 @@ def create_note(
     db.commit()
     db.refresh(note)
     return NoteRead.model_validate(note)
+
+
+@router.get("/notes/{note_id}", response_model=NoteRead)
+def get_note(
+    note_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> NoteRead:
+    return NoteRead.model_validate(get_owned_note(db, note_id, current_user.id))
 
 
 @router.patch("/notes/{note_id}", response_model=NoteRead)
@@ -167,11 +160,7 @@ def update_note(
     for field, value in data.items():
         setattr(note, field, value)
     if next_bookmark_id is not None:
-        bookmark = db.scalar(
-            select(Bookmark).where(
-                Bookmark.id == next_bookmark_id, Bookmark.user_id == current_user.id
-            )
-        )
+        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == next_bookmark_id, Bookmark.user_id == current_user.id))
         if bookmark:
             note.book_id = bookmark.book_id
             note.page_number = note.page_number or bookmark.page_number

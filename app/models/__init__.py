@@ -36,9 +36,13 @@ __all__ = [
     "CircleProgressUpdate",
     "UserConnection",
     "Notification",
+    "Notebook",
+    "Note",
+    "Highlight",
 ]
 
 from app.models.preservation_event import PreservationEvent
 
 from app.models.notebook import Notebook
 from app.models.note import Note
+from app.models.highlight import Highlight
