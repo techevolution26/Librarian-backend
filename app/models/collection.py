@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
 COLLECTION_VISIBILITIES = {"draft", "published", "restricted"}
+
+
+if TYPE_CHECKING:
+    from app.models.archival_object import ArchivalObject
 
 
 class Collection(Base):
@@ -34,6 +39,10 @@ class Collection(Base):
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    archival_objects: Mapped[list["ArchivalObject"]] = relationship(
+        "ArchivalObject", back_populates="collection"
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

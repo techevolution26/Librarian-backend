@@ -1,4 +1,5 @@
 from app.models.admin_activity_log import AdminActivityLog
+from app.models.archival_object import ArchivalObject
 from app.models.book import Book
 from app.models.collection import Collection
 from app.models.book_asset import BookAsset
@@ -14,6 +15,7 @@ from app.models.user_settings import UserSettings
 
 __all__ = [
     "User",
+    "ArchivalObject",
     "Book",
     "Collection",
     "BookAsset",
