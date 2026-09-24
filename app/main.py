@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
-from app.routes import auth, books, library, profile, settings as settings_route, connections, circles, notifications
+from app.routes import auth, books, library, profile, settings as settings_route, connections, circles, notifications, collections
 from app.core.database import Base, engine
 from sqlalchemy import text
 
@@ -21,6 +21,7 @@ app = FastAPI(
     openapi_tags=[
         {"name": "auth", "description": "Login, session, and current-user endpoints."},
         {"name": "books", "description": "Public catalog, discovery/facets, admin catalog management."},
+        {"name": "collections", "description": "Curated archival collections and their public catalogue boundary."},
         {"name": "library", "description": "A user's personal shelf and reading progress."},
         {"name": "circles", "description": "Shared reading groups."},
         {"name": "connections", "description": "Following/friending between users."},
@@ -66,6 +67,7 @@ app.include_router(settings_route.router)
 app.include_router(connections.router)
 app.include_router(circles.router)
 app.include_router(notifications.router)
+app.include_router(collections.router)
 
 # @app.on_event("startup")
 # def startup():
