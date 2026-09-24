@@ -12,9 +12,7 @@ router = APIRouter(prefix="/archival-objects", tags=["iiif"])
 
 
 @router.get("/{object_id}/iiif/profile", response_model=IIIFReadyProfile)
-def get_iiif_ready_profile(
-    object_id: int, db: Session = Depends(get_db)
-) -> IIIFReadyProfile:
+def get_iiif_ready_profile(object_id: int, db: Session = Depends(get_db)) -> IIIFReadyProfile:
     row = db.scalar(
         select(ArchivalObject).where(
             ArchivalObject.id == object_id,

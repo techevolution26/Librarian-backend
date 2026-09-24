@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from app.models.library_item import LibraryItem
     from app.models.book_asset import BookAsset
     from app.models.archival_object import ArchivalObject
+    from app.models.bookmark import Bookmark
 
 
 # Archival vocabulary — kept as free-text/CSV columns (not lookup tables) to match
@@ -68,6 +69,11 @@ class Book(Base):
         back_populates="book",
         cascade="all, delete-orphan",
         order_by="BookAsset.created_at.desc()",
+    )
+
+    bookmarks: Mapped[list["Bookmark"]] = relationship(
+        back_populates="book",
+        cascade="all, delete-orphan",
     )
 
     library_items: Mapped[list["LibraryItem"]] = relationship(

@@ -82,7 +82,6 @@ class ResourceContentRead(BaseModel):
 BookRead = ResourceRead
 BookContentRead = ResourceContentRead
 
-
 class AdminBookListRead(BaseModel):
     items: list[BookRead]
     total: int

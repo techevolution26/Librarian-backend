@@ -1,3 +1,3 @@
-from app.routes import archival_objects, books, library, profile, settings, preservation_events, fixity
+from app.routes import archival_objects, books, library, profile, settings, preservation_events, fixity, bookmarks
 
-__all__ = ["archival_objects", "books", "library", "profile", "settings", "preservation_events", "fixity"]
+__all__ = ["archival_objects", "books", "library", "profile", "settings", "preservation_events", "fixity", "bookmarks"]

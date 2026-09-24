@@ -6,6 +6,7 @@ from app.models.archival_rights import ArchivalRights
 from app.models.book import Book
 from app.models.collection import Collection
 from app.models.book_asset import BookAsset
+from app.models.bookmark import Bookmark
 from app.models.circle import Circle
 from app.models.circle_book import CircleBook
 from app.models.circle_member import CircleMember
@@ -25,6 +26,7 @@ __all__ = [
     "Book",
     "Collection",
     "BookAsset",
+    "Bookmark",
     "LibraryItem",
     "UserSettings",
     "AdminActivityLog",

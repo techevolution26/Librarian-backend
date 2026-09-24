@@ -23,9 +23,7 @@ def upgrade() -> None:
     )
 
     bind = op.get_bind()
-    rows = bind.execute(
-        sa.text("SELECT id FROM archival_objects ORDER BY id")
-    ).fetchall()
+    rows = bind.execute(sa.text("SELECT id FROM archival_objects ORDER BY id")).fetchall()
     for (object_id,) in rows:
         bind.execute(
             sa.text(
