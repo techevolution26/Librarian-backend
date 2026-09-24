@@ -35,11 +35,7 @@ def list_bookmarks(
         query = query.where(Bookmark.book_id == book_id)
 
     rows = db.scalars(
-        query.order_by(
-            Bookmark.page_number.asc().nulls_last(),
-            Bookmark.created_at.asc(),
-            Bookmark.id.asc(),
-        )
+        query.order_by(Bookmark.page_number.asc().nulls_last(), Bookmark.created_at.asc(), Bookmark.id.asc())
     ).all()
     return [BookmarkRead.model_validate(row) for row in rows]
 
@@ -50,9 +46,7 @@ def get_bookmark(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BookmarkRead:
-    return BookmarkRead.model_validate(
-        get_owned_bookmark(db, bookmark_id, current_user.id)
-    )
+    return BookmarkRead.model_validate(get_owned_bookmark(db, bookmark_id, current_user.id))
 
 
 @router.post("/", response_model=BookmarkRead, status_code=status.HTTP_201_CREATED)

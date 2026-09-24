@@ -39,3 +39,6 @@ __all__ = [
 ]
 
 from app.models.preservation_event import PreservationEvent
+
+from app.models.notebook import Notebook
+from app.models.note import Note

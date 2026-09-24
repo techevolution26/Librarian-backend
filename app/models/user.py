@@ -28,3 +28,4 @@ class User(Base):
     library_items = relationship("LibraryItem", back_populates="user", cascade="all, delete-orphan")
     settings = relationship("UserSettings", back_populates="user", cascade="all, delete-orphan", uselist=False)
     bookmarks = relationship("Bookmark", back_populates="user", cascade="all, delete-orphan")
+    notebook = relationship("Notebook", back_populates="user", cascade="all, delete-orphan", uselist=False)
