@@ -16,6 +16,7 @@ from app.routes import (
     circles,
     notifications,
     collections,
+    preservation_events,
 )
 from app.core.database import Base, engine
 from sqlalchemy import text
@@ -50,6 +51,10 @@ app = FastAPI(
         {
             "name": "notifications",
             "description": "Realtime and persisted in-app notifications.",
+        },
+        {
+            "name": "preservation",
+            "description": "Append-only archival preservation history.",
         },
     ],
 )
@@ -98,6 +103,7 @@ app.include_router(circles.router)
 app.include_router(notifications.router)
 app.include_router(collections.router)
 app.include_router(archival_objects.router)
+app.include_router(preservation_events.router)
 
 # @app.on_event("startup")
 # def startup():

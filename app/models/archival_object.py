@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from app.models.archival_metadata import ArchivalMetadata
     from app.models.archival_provenance import ArchivalProvenance
     from app.models.archival_rights import ArchivalRights
+    from app.models.preservation_event import PreservationEvent
 
 
 ARCHIVAL_OBJECT_TYPES = {
@@ -77,4 +78,9 @@ class ArchivalObject(Base):
     )
     rights: Mapped["ArchivalRights | None"] = relationship(
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
+    )
+    preservation_events: Mapped[list["PreservationEvent"]] = relationship(
+        back_populates="archival_object",
+        cascade="all, delete-orphan",
+        order_by="PreservationEvent.event_date.desc()",
     )

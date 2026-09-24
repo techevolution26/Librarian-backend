@@ -35,3 +35,5 @@ __all__ = [
     "UserConnection",
     "Notification",
 ]
+
+from app.models.preservation_event import PreservationEvent
