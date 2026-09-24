@@ -10,6 +10,7 @@ from app.core.security import get_current_user
 from app.models.archival_object import ArchivalObject
 from app.models.archival_metadata import ArchivalMetadata
 from app.models.archival_provenance import ArchivalProvenance
+from app.models.archival_rights import ArchivalRights
 from app.models.collection import Collection
 from app.models.user import User
 from app.schemas.archival_object import (
@@ -36,6 +37,7 @@ def _read(row: ArchivalObject) -> ArchivalObjectRead:
         book_id=row.book.id if row.book else None,
         metadata=row.intellectual_metadata,
         provenance=row.provenance,
+        rights=row.rights,
     )
 
 
@@ -83,6 +85,8 @@ def create_archival_object(
         row.intellectual_metadata = ArchivalMetadata(**payload.metadata.model_dump())
     if payload.provenance is not None:
         row.provenance = ArchivalProvenance(**payload.provenance.model_dump())
+    if payload.rights is not None:
+        row.rights = ArchivalRights(**payload.rights.model_dump())
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -118,6 +122,7 @@ def update_archival_object(
     updates = payload.model_dump(exclude_unset=True)
     metadata_payload = updates.pop("metadata", None)
     provenance_payload = updates.pop("provenance", None)
+    rights_payload = updates.pop("rights", None)
     if "identifier" in updates:
         identifier = updates["identifier"].strip()
         if db.scalar(
@@ -161,6 +166,13 @@ def update_archival_object(
         else:
             for field, value in provenance_payload.items():
                 setattr(row.provenance, field, value)
+
+    if rights_payload is not None:
+        if row.rights is None:
+            row.rights = ArchivalRights(archival_object=row, **rights_payload)
+        else:
+            for field, value in rights_payload.items():
+                setattr(row.rights, field, value)
 
     db.commit()
     db.refresh(row)

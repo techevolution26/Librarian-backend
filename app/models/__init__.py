@@ -2,6 +2,7 @@ from app.models.admin_activity_log import AdminActivityLog
 from app.models.archival_object import ArchivalObject
 from app.models.archival_metadata import ArchivalMetadata
 from app.models.archival_provenance import ArchivalProvenance
+from app.models.archival_rights import ArchivalRights
 from app.models.book import Book
 from app.models.collection import Collection
 from app.models.book_asset import BookAsset
@@ -20,6 +21,7 @@ __all__ = [
     "ArchivalObject",
     "ArchivalMetadata",
     "ArchivalProvenance",
+    "ArchivalRights",
     "Book",
     "Collection",
     "BookAsset",

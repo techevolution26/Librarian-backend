@@ -11,6 +11,7 @@ from app.schemas.archival_provenance import (
     ArchivalProvenanceRead,
     ArchivalProvenanceUpdate,
 )
+from app.schemas.archival_rights import ArchivalRightsRead, ArchivalRightsUpdate
 
 
 class ArchivalObjectRead(BaseModel):
@@ -27,6 +28,7 @@ class ArchivalObjectRead(BaseModel):
     book_id: int | None = None
     metadata: ArchivalMetadataRead | None = None
     provenance: ArchivalProvenanceRead | None = None
+    rights: ArchivalRightsRead | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -40,6 +42,7 @@ class ArchivalObjectCreate(BaseModel):
     visibility: str = "draft"
     metadata: ArchivalMetadataUpdate | None = None
     provenance: ArchivalProvenanceUpdate | None = None
+    rights: ArchivalRightsUpdate | None = None
 
     @field_validator("object_type")
     @classmethod
@@ -67,6 +70,7 @@ class ArchivalObjectUpdate(BaseModel):
     visibility: str | None = None
     metadata: ArchivalMetadataUpdate | None = None
     provenance: ArchivalProvenanceUpdate | None = None
+    rights: ArchivalRightsUpdate | None = None
 
     @field_validator("object_type")
     @classmethod

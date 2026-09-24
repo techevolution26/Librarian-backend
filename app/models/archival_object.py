@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from app.models.collection import Collection
     from app.models.archival_metadata import ArchivalMetadata
     from app.models.archival_provenance import ArchivalProvenance
+    from app.models.archival_rights import ArchivalRights
 
 
 ARCHIVAL_OBJECT_TYPES = {
@@ -72,5 +73,8 @@ class ArchivalObject(Base):
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
     )
     provenance: Mapped["ArchivalProvenance | None"] = relationship(
+        back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
+    )
+    rights: Mapped["ArchivalRights | None"] = relationship(
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
     )
