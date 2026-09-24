@@ -17,11 +17,7 @@ router = APIRouter(prefix="/highlights", tags=["highlights"])
 
 
 def owned_highlight(db: Session, highlight_id: int, user_id: int) -> Highlight:
-    row = db.scalar(
-        select(Highlight).where(
-            Highlight.id == highlight_id, Highlight.user_id == user_id
-        )
-    )
+    row = db.scalar(select(Highlight).where(Highlight.id == highlight_id, Highlight.user_id == user_id))
     if not row:
         raise HTTPException(status_code=404, detail="Highlight not found")
     return row
@@ -36,11 +32,7 @@ def validate_book(db: Session, book_id: int) -> None:
 def validate_note(db: Session, note_id: int | None, user_id: int, book_id: int) -> None:
     if note_id is None:
         return
-    note = db.scalar(
-        select(Note)
-        .join(Notebook)
-        .where(Note.id == note_id, Notebook.user_id == user_id)
-    )
+    note = db.scalar(select(Note).join(Notebook).where(Note.id == note_id, Notebook.user_id == user_id))
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     if note.book_id is not None and note.book_id != book_id:
@@ -59,15 +51,11 @@ def list_highlights(
         query = query.where(Highlight.book_id == book_id)
     if page_number is not None:
         query = query.where(Highlight.page_number == page_number)
-    rows = db.scalars(
-        query.order_by(Highlight.created_at.desc(), Highlight.id.desc())
-    ).all()
+    rows = db.scalars(query.order_by(Highlight.created_at.desc(), Highlight.id.desc())).all()
     return [HighlightRead.model_validate(row) for row in rows]
 
 
-@router.post(
-    "/{highlight_id}/develop", response_model=NoteRead, status_code=status.HTTP_200_OK
-)
+@router.post("/{highlight_id}/develop", response_model=NoteRead, status_code=status.HTTP_200_OK)
 def develop_highlight(
     highlight_id: int,
     db: Session = Depends(get_db),
@@ -84,9 +72,7 @@ def develop_highlight(
 
     if highlight.note_id is not None:
         existing = db.scalar(
-            select(Note)
-            .join(Notebook)
-            .where(
+            select(Note).join(Notebook).where(
                 Note.id == highlight.note_id,
                 Notebook.user_id == current_user.id,
             )
@@ -100,7 +86,7 @@ def develop_highlight(
         book_id=highlight.book_id,
         page_number=highlight.page_number,
         title=f"Quote — Page {highlight.page_number}",
-        body=f"“{highlight.selected_text.strip()}”\n\n",
+        body=f'“{highlight.selected_text.strip()}”\n\n',
     )
     db.add(note)
     db.flush()
@@ -116,9 +102,7 @@ def get_highlight(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> HighlightRead:
-    return HighlightRead.model_validate(
-        owned_highlight(db, highlight_id, current_user.id)
-    )
+    return HighlightRead.model_validate(owned_highlight(db, highlight_id, current_user.id))
 
 
 @router.post("/", response_model=HighlightRead, status_code=status.HTTP_201_CREATED)

@@ -12,7 +12,12 @@ from app.models.circle import Circle
 from app.models.circle_book import CircleBook
 from app.models.circle_member import CircleMember
 from app.models.circle_progress_update import CircleProgressUpdate
-from app.schemas.circles import CircleInviteCreate, CircleMemberRead
+from app.models.circle_join_request import CircleJoinRequest
+from app.schemas.circles import (
+    CircleInviteCreate,
+    CircleMemberRead,
+    CircleJoinConditions,
+)
 from app.models.user import User
 from app.models.user_connection import UserConnection
 from app.schemas.book import BookRead
@@ -26,12 +31,12 @@ from app.schemas.circles import (
     CircleProgressUpdateRead,
     CircleRead,
     CircleUpdate,
+    CircleJoinRequestCreate,
+    CircleJoinRequestRead,
+    CirclePublicRead,
 )
 from app.models.library_item import LibraryItem
 from app.services.notifications import create_notification
-
-
-
 
 router = APIRouter(prefix="/circles", tags=["circles"])
 
@@ -72,11 +77,25 @@ def create_circle(
         counter += 1
         slug = f"{base_slug}-{counter}"
 
+    if payload.visibility not in {"private", "invite_only", "public"}:
+        raise HTTPException(
+            status_code=422,
+            detail="Visibility must be private, invite_only, or public.",
+        )
+    if payload.join_policy not in {"invite_only", "request", "open"}:
+        raise HTTPException(
+            status_code=422, detail="Join policy must be invite_only, request, or open."
+        )
+    if payload.visibility != "public":
+        payload.join_policy = "invite_only"
+
     circle = Circle(
         name=payload.name,
         slug=slug,
         description=payload.description,
         visibility=payload.visibility,
+        join_policy=payload.join_policy,
+        join_conditions=payload.join_conditions.model_dump(),
         owner_id=current_user.id,
     )
     db.add(circle)
@@ -93,9 +112,7 @@ def create_circle(
     db.commit()
 
     row = db.scalar(
-        select(Circle)
-        .where(Circle.id == circle.id)
-        .options(joinedload(Circle.owner))
+        select(Circle).where(Circle.id == circle.id).options(joinedload(Circle.owner))
     )
     if not row:
         raise HTTPException(status_code=404, detail="Circle not found after creation")
@@ -122,23 +139,119 @@ def list_my_circles(
     return [CircleRead.model_validate(row) for row in rows]
 
 
+@router.get("/discover", response_model=list[CirclePublicRead])
+def discover_circles(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[CirclePublicRead]:
+    rows = db.scalars(
+        select(Circle)
+        .where(Circle.visibility == "public", Circle.archived_at.is_(None))
+        .options(joinedload(Circle.owner))
+        .order_by(Circle.created_at.desc())
+    ).all()
+    results: list[CirclePublicRead] = []
+    for row in rows:
+        member_count = (
+            db.query(CircleMember)
+            .filter(CircleMember.circle_id == row.id, CircleMember.status == "active")
+            .count()
+        )
+        book_count = db.query(CircleBook).filter(CircleBook.circle_id == row.id).count()
+        results.append(
+            CirclePublicRead(
+                id=row.id,
+                name=row.name,
+                slug=row.slug,
+                description=row.description,
+                visibility=row.visibility,
+                join_policy=row.join_policy,
+                join_conditions=row.join_conditions or {},
+                avatar_url=row.avatar_url,
+                owner=row.owner,
+                member_count=member_count,
+                book_count=book_count,
+                created_at=row.created_at,
+            )
+        )
+    return results
+
+
+@router.get("/public/{circle_id}", response_model=CirclePublicRead)
+def get_public_circle(
+    circle_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CirclePublicRead:
+    row = db.scalar(
+        select(Circle)
+        .where(
+            Circle.id == circle_id,
+            Circle.visibility == "public",
+            Circle.archived_at.is_(None),
+        )
+        .options(joinedload(Circle.owner))
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Public circle not found")
+    return CirclePublicRead(
+        id=row.id,
+        name=row.name,
+        slug=row.slug,
+        description=row.description,
+        visibility=row.visibility,
+        join_policy=row.join_policy,
+        join_conditions=row.join_conditions or {},
+        avatar_url=row.avatar_url,
+        owner=row.owner,
+        member_count=db.query(CircleMember)
+        .filter(CircleMember.circle_id == row.id, CircleMember.status == "active")
+        .count(),
+        book_count=db.query(CircleBook).filter(CircleBook.circle_id == row.id).count(),
+        created_at=row.created_at,
+    )
+
+
 @router.get("/{circle_id}", response_model=CircleRead)
 def get_circle(
     circle_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> CircleRead:
-    require_circle_member(db, circle_id, current_user.id)
-
     row = db.scalar(
         select(Circle)
-        .where(Circle.id == circle_id)
+        .where(Circle.id == circle_id, Circle.archived_at.is_(None))
         .options(joinedload(Circle.owner))
     )
     if not row:
         raise HTTPException(status_code=404, detail="Circle not found")
 
-    return CircleRead.model_validate(row)
+    member = db.scalar(
+        select(CircleMember).where(
+            CircleMember.circle_id == circle_id,
+            CircleMember.user_id == current_user.id,
+            CircleMember.status == "active",
+        )
+    )
+    if not member and row.visibility != "public":
+        raise HTTPException(status_code=403, detail="Not a circle member")
+
+    return CircleRead.model_validate(
+        {
+            "id": row.id,
+            "name": row.name,
+            "slug": row.slug,
+            "description": row.description,
+            "visibility": row.visibility,
+            "join_policy": row.join_policy,
+            "join_conditions": row.join_conditions or {},
+            "avatar_url": row.avatar_url,
+            "owner": row.owner,
+            "is_member": member is not None,
+            "created_at": row.created_at,
+            "updated_at": row.updated_at,
+        }
+    )
 
 
 @router.patch("/{circle_id}", response_model=CircleRead)
@@ -156,6 +269,29 @@ def update_circle(
         raise HTTPException(status_code=404, detail="Circle not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    if "visibility" in updates and updates["visibility"] not in {
+        "private",
+        "invite_only",
+        "public",
+    }:
+        raise HTTPException(
+            status_code=422,
+            detail="Visibility must be private, invite_only, or public.",
+        )
+    if "join_policy" in updates and updates["join_policy"] not in {
+        "invite_only",
+        "request",
+        "open",
+    }:
+        raise HTTPException(
+            status_code=422, detail="Join policy must be invite_only, request, or open."
+        )
+    if updates.get("visibility") in {"private", "invite_only"}:
+        updates["join_policy"] = "invite_only"
+    if "join_conditions" in updates and updates["join_conditions"] is not None:
+        updates["join_conditions"] = CircleJoinConditions.model_validate(
+            updates["join_conditions"]
+        ).model_dump()
     for field, value in updates.items():
         setattr(row, field, value)
 
@@ -164,9 +300,7 @@ def update_circle(
     db.refresh(row)
 
     updated = db.scalar(
-        select(Circle)
-        .where(Circle.id == circle_id)
-        .options(joinedload(Circle.owner))
+        select(Circle).where(Circle.id == circle_id).options(joinedload(Circle.owner))
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Circle not found after update")
@@ -221,6 +355,10 @@ def invite_circle_member(
             detail="Only accepted connections can be invited into a circle.",
         )
 
+    circle = db.scalar(select(Circle).where(Circle.id == circle_id))
+    if not circle:
+        raise HTTPException(status_code=404, detail="Circle not found")
+
     row = CircleMember(
         circle_id=circle_id,
         user_id=payload.user_id,
@@ -237,7 +375,11 @@ def invite_circle_member(
         type="circle.invite",
         title="Circle invitation",
         body=f"{current_user.full_name} added you to {circle.name}.",
-        data={"circle_id": circle.id, "circle_slug": circle.slug, "invited_by": current_user.id},
+        data={
+            "circle_id": circle.id,
+            "circle_slug": circle.slug,
+            "invited_by": current_user.id,
+        },
     )
     db.commit()
     db.refresh(row)
@@ -254,6 +396,83 @@ def invite_circle_member(
         )
 
     return CircleMemberRead.model_validate(result)
+
+
+@router.post(
+    "/{circle_id}/join",
+    response_model=CircleJoinRequestRead | CircleMemberRead,
+    status_code=201,
+)
+def join_circle(
+    circle_id: int,
+    payload: CircleJoinRequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    circle = db.scalar(
+        select(Circle).where(Circle.id == circle_id, Circle.archived_at.is_(None))
+    )
+    if not circle or circle.visibility != "public":
+        raise HTTPException(status_code=404, detail="Public circle not found")
+    existing_member = db.scalar(
+        select(CircleMember).where(
+            CircleMember.circle_id == circle_id,
+            CircleMember.user_id == current_user.id,
+            CircleMember.status == "active",
+        )
+    )
+    if existing_member:
+        return existing_member
+    if circle.join_policy == "invite_only":
+        raise HTTPException(status_code=403, detail="This circle is invite only.")
+    conditions = circle.join_conditions or {}
+    if (
+        conditions.get("require_rules_acceptance")
+        and payload.answers.get("__rules_accepted") != "true"
+    ):
+        raise HTTPException(
+            status_code=422, detail="You must accept the circle rules before joining."
+        )
+    questions = conditions.get("questions") or []
+    missing = [q for q in questions if not str(payload.answers.get(q, "")).strip()]
+    if missing:
+        raise HTTPException(status_code=422, detail="Please answer all join questions.")
+    pending = db.scalar(
+        select(CircleJoinRequest).where(
+            CircleJoinRequest.circle_id == circle_id,
+            CircleJoinRequest.user_id == current_user.id,
+            CircleJoinRequest.status == "pending",
+        )
+    )
+    if pending:
+        return CircleJoinRequestRead.model_validate(pending)
+    if circle.join_policy == "open" and not conditions.get("require_approval"):
+        row = CircleMember(
+            circle_id=circle_id,
+            user_id=current_user.id,
+            role="member",
+            status="active",
+            joined_at=datetime.now(timezone.utc),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        result = db.scalar(
+            select(CircleMember)
+            .where(CircleMember.id == row.id)
+            .options(joinedload(CircleMember.user))
+        )
+        return CircleMemberRead.model_validate(result)
+    request = CircleJoinRequest(
+        circle_id=circle_id,
+        user_id=current_user.id,
+        status="pending",
+        answers=payload.answers,
+    )
+    db.add(request)
+    db.commit()
+    db.refresh(request)
+    return CircleJoinRequestRead.model_validate(request)
 
 
 @router.get("/{circle_id}/members", response_model=list[CircleMemberRead])
@@ -316,7 +535,9 @@ def attach_book_to_circle(
         .options(joinedload(CircleBook.book))
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Circle book not found after attach")
+        raise HTTPException(
+            status_code=404, detail="Circle book not found after attach"
+        )
 
     return CircleBookRead(
         id=result.id,
@@ -357,7 +578,9 @@ def list_circle_books(
     ]
 
 
-@router.post("/{circle_id}/progress", response_model=CircleProgressUpdateRead, status_code=201)
+@router.post(
+    "/{circle_id}/progress", response_model=CircleProgressUpdateRead, status_code=201
+)
 def create_progress_update(
     circle_id: int,
     payload: CircleProgressUpdateCreate,
@@ -406,10 +629,11 @@ def create_progress_update(
         .options(joinedload(CircleProgressUpdate.user))
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Progress update not found after create")
+        raise HTTPException(
+            status_code=404, detail="Progress update not found after create"
+        )
 
     return CircleProgressUpdateRead.model_validate(result)
-
 
 
 @router.get("/{circle_id}/progress", response_model=list[CircleProgressUpdateRead])
@@ -421,13 +645,13 @@ def list_progress_updates(
     require_circle_member(db, circle_id, current_user.id)
 
     rows = db.scalars(
-    select(CircleProgressUpdate)
-    .where(CircleProgressUpdate.circle_id == circle_id)
-    .options(
-        joinedload(CircleProgressUpdate.user),
-        joinedload(CircleProgressUpdate.circle_book).joinedload(CircleBook.book),
-    )
-    .order_by(CircleProgressUpdate.created_at.desc())
+        select(CircleProgressUpdate)
+        .where(CircleProgressUpdate.circle_id == circle_id)
+        .options(
+            joinedload(CircleProgressUpdate.user),
+            joinedload(CircleProgressUpdate.circle_book).joinedload(CircleBook.book),
+        )
+        .order_by(CircleProgressUpdate.created_at.desc())
     ).all()
 
     return [CircleProgressUpdateRead.model_validate(row) for row in rows]

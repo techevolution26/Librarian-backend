@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.schemas.book import BookRead
 
@@ -32,14 +32,23 @@ class CircleMemberRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CircleJoinConditions(BaseModel):
+    require_approval: bool = False
+    require_rules_acceptance: bool = True
+    questions: list[str] = Field(default_factory=list)
+
+
 class CircleRead(BaseModel):
     id: int
     name: str
     slug: str
     description: str | None = None
     visibility: str
+    join_policy: str
+    join_conditions: CircleJoinConditions
     avatar_url: str | None = None
     owner: CircleOwnerRead
+    is_member: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -50,16 +59,51 @@ class CircleCreate(BaseModel):
     name: str
     description: str | None = None
     visibility: str = "private"
+    join_policy: str = "invite_only"
+    join_conditions: CircleJoinConditions = Field(default_factory=CircleJoinConditions)
 
 
 class CircleUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     visibility: str | None = None
+    join_policy: str | None = None
+    join_conditions: CircleJoinConditions | None = None
 
 
 class CircleInviteCreate(BaseModel):
     user_id: int
+
+
+class CirclePublicRead(BaseModel):
+    id: int
+    name: str
+    slug: str
+    description: str | None = None
+    visibility: str
+    join_policy: str
+    join_conditions: CircleJoinConditions
+    avatar_url: str | None = None
+    owner: CircleOwnerRead
+    member_count: int
+    book_count: int
+    created_at: datetime
+
+
+class CircleJoinRequestCreate(BaseModel):
+    answers: dict[str, str] = Field(default_factory=dict)
+
+
+class CircleJoinRequestRead(BaseModel):
+    id: int
+    circle_id: int
+    user_id: int
+    status: str
+    answers: dict[str, str]
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CircleBookRead(BaseModel):
