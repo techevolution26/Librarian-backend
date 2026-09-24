@@ -8,6 +8,8 @@ from app.core.authz import require_admin_user
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.archival_object import ArchivalObject
+from app.models.archival_metadata import ArchivalMetadata
+from app.models.archival_provenance import ArchivalProvenance
 from app.models.collection import Collection
 from app.models.user import User
 from app.schemas.archival_object import (
@@ -32,6 +34,8 @@ def _read(row: ArchivalObject) -> ArchivalObjectRead:
         created_at=row.created_at,
         updated_at=row.updated_at,
         book_id=row.book.id if row.book else None,
+        metadata=row.intellectual_metadata,
+        provenance=row.provenance,
     )
 
 
@@ -75,6 +79,10 @@ def create_archival_object(
         collection_id=payload.collection_id,
         visibility=payload.visibility,
     )
+    if payload.metadata is not None:
+        row.intellectual_metadata = ArchivalMetadata(**payload.metadata.model_dump())
+    if payload.provenance is not None:
+        row.provenance = ArchivalProvenance(**payload.provenance.model_dump())
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -108,6 +116,8 @@ def update_archival_object(
         raise HTTPException(status_code=404, detail="Archival object not found")
 
     updates = payload.model_dump(exclude_unset=True)
+    metadata_payload = updates.pop("metadata", None)
+    provenance_payload = updates.pop("provenance", None)
     if "identifier" in updates:
         identifier = updates["identifier"].strip()
         if db.scalar(
@@ -133,6 +143,25 @@ def update_archival_object(
 
     for field, value in updates.items():
         setattr(row, field, value)
+
+    if metadata_payload is not None:
+        if row.intellectual_metadata is None:
+            row.intellectual_metadata = ArchivalMetadata(
+                archival_object=row, **metadata_payload
+            )
+        else:
+            for field, value in metadata_payload.items():
+                setattr(row.intellectual_metadata, field, value)
+
+    if provenance_payload is not None:
+        if row.provenance is None:
+            row.provenance = ArchivalProvenance(
+                archival_object=row, **provenance_payload
+            )
+        else:
+            for field, value in provenance_payload.items():
+                setattr(row.provenance, field, value)
+
     db.commit()
     db.refresh(row)
     return _read(row)

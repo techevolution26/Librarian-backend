@@ -6,6 +6,11 @@ from app.models.archival_object import (
     ARCHIVAL_OBJECT_TYPES,
     ARCHIVAL_OBJECT_VISIBILITIES,
 )
+from app.schemas.archival_metadata import ArchivalMetadataRead, ArchivalMetadataUpdate
+from app.schemas.archival_provenance import (
+    ArchivalProvenanceRead,
+    ArchivalProvenanceUpdate,
+)
 
 
 class ArchivalObjectRead(BaseModel):
@@ -20,6 +25,8 @@ class ArchivalObjectRead(BaseModel):
     created_at: datetime
     updated_at: datetime
     book_id: int | None = None
+    metadata: ArchivalMetadataRead | None = None
+    provenance: ArchivalProvenanceRead | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -31,6 +38,8 @@ class ArchivalObjectCreate(BaseModel):
     description: str | None = None
     collection_id: int | None = None
     visibility: str = "draft"
+    metadata: ArchivalMetadataUpdate | None = None
+    provenance: ArchivalProvenanceUpdate | None = None
 
     @field_validator("object_type")
     @classmethod
@@ -56,6 +65,8 @@ class ArchivalObjectUpdate(BaseModel):
     description: str | None = None
     collection_id: int | None = None
     visibility: str | None = None
+    metadata: ArchivalMetadataUpdate | None = None
+    provenance: ArchivalProvenanceUpdate | None = None
 
     @field_validator("object_type")
     @classmethod

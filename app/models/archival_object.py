@@ -11,6 +11,8 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.book import Book
     from app.models.collection import Collection
+    from app.models.archival_metadata import ArchivalMetadata
+    from app.models.archival_provenance import ArchivalProvenance
 
 
 ARCHIVAL_OBJECT_TYPES = {
@@ -65,4 +67,10 @@ class ArchivalObject(Base):
     )
     book: Mapped["Book | None"] = relationship(
         back_populates="archival_object", uselist=False
+    )
+    intellectual_metadata: Mapped["ArchivalMetadata | None"] = relationship(
+        back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
+    )
+    provenance: Mapped["ArchivalProvenance | None"] = relationship(
+        back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
     )
