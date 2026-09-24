@@ -22,12 +22,7 @@ class ArchivalRightsBase(BaseModel):
     notes: str | None = None
 
     @field_validator(
-        "rights_holder",
-        "license",
-        "copyright_status",
-        "jurisdiction",
-        "rights_source",
-        "verified_by",
+        "rights_holder", "license", "copyright_status", "jurisdiction", "rights_source", "verified_by"
     )
     @classmethod
     def normalize_strings(cls, value: str | None) -> str | None:

@@ -4,7 +4,6 @@ Revision ID: e7f2a6b91c44
 Revises: c2e4f7a91b33
 Create Date: 2026-09-24
 """
-
 from typing import Sequence, Union
 
 from alembic import op
@@ -31,32 +30,13 @@ def upgrade() -> None:
         sa.Column("edition", sa.String(length=255), nullable=True),
         sa.Column("external_identifier", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.ForeignKeyConstraint(
-            ["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"
-        ),
-        sa.UniqueConstraint(
-            "archival_object_id", name="uq_archival_metadata_archival_object_id"
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.ForeignKeyConstraint(["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("archival_object_id", name="uq_archival_metadata_archival_object_id"),
     )
     op.create_index("ix_archival_metadata_id", "archival_metadata", ["id"])
-    op.create_index(
-        "ix_archival_metadata_archival_object_id",
-        "archival_metadata",
-        ["archival_object_id"],
-        unique=True,
-    )
+    op.create_index("ix_archival_metadata_archival_object_id", "archival_metadata", ["archival_object_id"], unique=True)
 
     op.create_table(
         "archival_provenance",
@@ -78,32 +58,13 @@ def upgrade() -> None:
         sa.Column("derivative_format", sa.String(length=100), nullable=True),
         sa.Column("software", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.ForeignKeyConstraint(
-            ["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"
-        ),
-        sa.UniqueConstraint(
-            "archival_object_id", name="uq_archival_provenance_archival_object_id"
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.ForeignKeyConstraint(["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("archival_object_id", name="uq_archival_provenance_archival_object_id"),
     )
     op.create_index("ix_archival_provenance_id", "archival_provenance", ["id"])
-    op.create_index(
-        "ix_archival_provenance_archival_object_id",
-        "archival_provenance",
-        ["archival_object_id"],
-        unique=True,
-    )
+    op.create_index("ix_archival_provenance_archival_object_id", "archival_provenance", ["archival_object_id"], unique=True)
 
     # Backfill structured records from the archival fields already present on
     # Book. No public catalogue fields are removed or changed by this migration.
@@ -145,22 +106,12 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index(
-        "ix_archival_provenance_archival_object_id", table_name="archival_provenance"
-    )
+    op.drop_index("ix_archival_provenance_archival_object_id", table_name="archival_provenance")
     op.drop_index("ix_archival_provenance_id", table_name="archival_provenance")
-    op.drop_constraint(
-        "uq_archival_provenance_archival_object_id",
-        "archival_provenance",
-        type_="unique",
-    )
+    op.drop_constraint("uq_archival_provenance_archival_object_id", "archival_provenance", type_="unique")
     op.drop_table("archival_provenance")
 
-    op.drop_index(
-        "ix_archival_metadata_archival_object_id", table_name="archival_metadata"
-    )
+    op.drop_index("ix_archival_metadata_archival_object_id", table_name="archival_metadata")
     op.drop_index("ix_archival_metadata_id", table_name="archival_metadata")
-    op.drop_constraint(
-        "uq_archival_metadata_archival_object_id", "archival_metadata", type_="unique"
-    )
+    op.drop_constraint("uq_archival_metadata_archival_object_id", "archival_metadata", type_="unique")
     op.drop_table("archival_metadata")

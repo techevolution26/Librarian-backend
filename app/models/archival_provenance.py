@@ -33,9 +33,7 @@ class ArchivalProvenance(Base):
     origin_place: Mapped[str | None] = mapped_column(String(255), nullable=True)
     origin_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     digitized_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    digitized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    digitized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     digitization_method: Mapped[str | None] = mapped_column(String(255), nullable=True)
     scanner_device: Mapped[str | None] = mapped_column(String(255), nullable=True)
     master_format: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -46,12 +44,7 @@ class ArchivalProvenance(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    archival_object: Mapped["ArchivalObject"] = relationship(
-        back_populates="provenance"
-    )
+    archival_object: Mapped["ArchivalObject"] = relationship(back_populates="provenance")

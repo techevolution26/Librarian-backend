@@ -4,7 +4,6 @@ Revision ID: f4b8c2d91e55
 Revises: e7f2a6b91c44
 Create Date: 2026-09-24
 """
-
 from typing import Sequence, Union
 
 from alembic import op
@@ -37,32 +36,13 @@ def upgrade() -> None:
         sa.Column("verified_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("verified_by", sa.String(length=255), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.Column(
-            "updated_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.ForeignKeyConstraint(
-            ["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"
-        ),
-        sa.UniqueConstraint(
-            "archival_object_id", name="uq_archival_rights_archival_object_id"
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.ForeignKeyConstraint(["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"),
+        sa.UniqueConstraint("archival_object_id", name="uq_archival_rights_archival_object_id"),
     )
     op.create_index("ix_archival_rights_id", "archival_rights", ["id"])
-    op.create_index(
-        "ix_archival_rights_archival_object_id",
-        "archival_rights",
-        ["archival_object_id"],
-        unique=True,
-    )
+    op.create_index("ix_archival_rights_archival_object_id", "archival_rights", ["archival_object_id"], unique=True)
 
     # Preserve the existing Book rights statement without inventing new legal
     # conclusions. The remaining structured fields intentionally stay NULL
@@ -78,7 +58,5 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_archival_rights_archival_object_id", table_name="archival_rights")
     op.drop_index("ix_archival_rights_id", table_name="archival_rights")
-    op.drop_constraint(
-        "uq_archival_rights_archival_object_id", "archival_rights", type_="unique"
-    )
+    op.drop_constraint("uq_archival_rights_archival_object_id", "archival_rights", type_="unique")
     op.drop_table("archival_rights")

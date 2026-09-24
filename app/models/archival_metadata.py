@@ -24,9 +24,7 @@ class ArchivalMetadata(Base):
         unique=True,
         index=True,
     )
-    alternative_titles: Mapped[list[str]] = mapped_column(
-        JSON, nullable=False, default=list
-    )
+    alternative_titles: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     contributors: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     language: Mapped[str | None] = mapped_column(String(40), nullable=True)
     subjects: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
@@ -40,12 +38,7 @@ class ArchivalMetadata(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    archival_object: Mapped["ArchivalObject"] = relationship(
-        back_populates="intellectual_metadata"
-    )
+    archival_object: Mapped["ArchivalObject"] = relationship(back_populates="intellectual_metadata")

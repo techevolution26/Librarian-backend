@@ -2,10 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.preservation_event import (
-    PRESERVATION_EVENT_OUTCOMES,
-    PRESERVATION_EVENT_TYPES,
-)
+from app.models.preservation_event import PRESERVATION_EVENT_OUTCOMES, PRESERVATION_EVENT_TYPES
 
 
 class PreservationEventCreate(BaseModel):

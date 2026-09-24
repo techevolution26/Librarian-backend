@@ -46,19 +46,14 @@ class PreservationEvent(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     archival_object_id: Mapped[int] = mapped_column(
-        ForeignKey("archival_objects.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
+        ForeignKey("archival_objects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     asset_id: Mapped[int | None] = mapped_column(
         ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True, index=True
     )
     event_type: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
     event_date: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        index=True,
+        DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc), index=True
     )
     outcome: Mapped[str] = mapped_column(String(20), nullable=False, default="unknown")
     agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -71,7 +66,5 @@ class PreservationEvent(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
-    archival_object: Mapped["ArchivalObject"] = relationship(
-        back_populates="preservation_events"
-    )
+    archival_object: Mapped["ArchivalObject"] = relationship(back_populates="preservation_events")
     asset: Mapped["BookAsset | None"] = relationship()

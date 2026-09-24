@@ -2,15 +2,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.archival_object import (
-    ARCHIVAL_OBJECT_TYPES,
-    ARCHIVAL_OBJECT_VISIBILITIES,
-)
+from app.models.archival_object import ARCHIVAL_OBJECT_TYPES, ARCHIVAL_OBJECT_VISIBILITIES
 from app.schemas.archival_metadata import ArchivalMetadataRead, ArchivalMetadataUpdate
-from app.schemas.archival_provenance import (
-    ArchivalProvenanceRead,
-    ArchivalProvenanceUpdate,
-)
+from app.schemas.archival_provenance import ArchivalProvenanceRead, ArchivalProvenanceUpdate
 from app.schemas.archival_rights import ArchivalRightsRead, ArchivalRightsUpdate
 
 

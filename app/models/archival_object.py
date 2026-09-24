@@ -39,37 +39,24 @@ class ArchivalObject(Base):
     __tablename__ = "archival_objects"
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
-    identifier: Mapped[str] = mapped_column(
-        String(100), nullable=False, unique=True, index=True
-    )
+    identifier: Mapped[str] = mapped_column(String(100), nullable=False, unique=True, index=True)
     object_type: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     collection_id: Mapped[int | None] = mapped_column(
         ForeignKey("collections.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    visibility: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="draft", index=True
-    )
-    archived_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
-    collection: Mapped["Collection | None"] = relationship(
-        back_populates="archival_objects"
-    )
-    book: Mapped["Book | None"] = relationship(
-        back_populates="archival_object", uselist=False
-    )
+    collection: Mapped["Collection | None"] = relationship(back_populates="archival_objects")
+    book: Mapped["Book | None"] = relationship(back_populates="archival_object", uselist=False)
     intellectual_metadata: Mapped["ArchivalMetadata | None"] = relationship(
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
     )
@@ -80,7 +67,5 @@ class ArchivalObject(Base):
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
     )
     preservation_events: Mapped[list["PreservationEvent"]] = relationship(
-        back_populates="archival_object",
-        cascade="all, delete-orphan",
-        order_by="PreservationEvent.event_date.desc()",
+        back_populates="archival_object", cascade="all, delete-orphan", order_by="PreservationEvent.event_date.desc()"
     )

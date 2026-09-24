@@ -38,37 +38,26 @@ class Book(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     content_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[str] = mapped_column(String(20), default="published")
-    archived_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     cover_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     is_featured: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     # --- Archival / provenance metadata (the "Librarian archive shape") ---
-    accession_no: Mapped[str | None] = mapped_column(
-        String(40), unique=True, nullable=True, index=True
-    )
+    accession_no: Mapped[str | None] = mapped_column(String(40), unique=True, nullable=True, index=True)
     language: Mapped[str] = mapped_column(String(40), default="en")
     subjects_csv: Mapped[str] = mapped_column(String(255), default="")
     origin: Mapped[str | None] = mapped_column(String(255), nullable=True)
     era: Mapped[str | None] = mapped_column(String(120), nullable=True)
     original_format: Mapped[str] = mapped_column(String(30), default="born-digital")
-    rights_statement: Mapped[str] = mapped_column(
-        String(30), default="all-rights-reserved"
-    )
+    rights_statement: Mapped[str] = mapped_column(String(30), default="all-rights-reserved")
     condition_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     curator_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     digitized_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    digitized_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    digitized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     archival_object_id: Mapped[int | None] = mapped_column(
-        ForeignKey("archival_objects.id", ondelete="SET NULL"),
-        nullable=True,
-        unique=True,
-        index=True,
+        ForeignKey("archival_objects.id", ondelete="SET NULL"), nullable=True, unique=True, index=True
     )
 
     archival_object: Mapped["ArchivalObject | None"] = relationship(

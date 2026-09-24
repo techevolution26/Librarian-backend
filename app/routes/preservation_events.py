@@ -12,10 +12,7 @@ from app.models.book import Book
 from app.models.book_asset import BookAsset
 from app.models.preservation_event import PreservationEvent
 from app.models.user import User
-from app.schemas.preservation_event import (
-    PreservationEventCreate,
-    PreservationEventRead,
-)
+from app.schemas.preservation_event import PreservationEventCreate, PreservationEventRead
 
 router = APIRouter(prefix="/preservation-events", tags=["preservation"])
 
@@ -43,9 +40,7 @@ def list_preservation_events(
     return [_read(row) for row in rows]
 
 
-@router.post(
-    "/admin/{object_id}", response_model=PreservationEventRead, status_code=201
-)
+@router.post("/admin/{object_id}", response_model=PreservationEventRead, status_code=201)
 def create_preservation_event(
     object_id: int,
     payload: PreservationEventCreate,
@@ -67,9 +62,7 @@ def create_preservation_event(
             select(Book.archival_object_id).where(Book.id == asset.book_id)
         )
         if asset_object_id != object_id:
-            raise HTTPException(
-                status_code=400, detail="Asset does not belong to this archival object"
-            )
+            raise HTTPException(status_code=400, detail="Asset does not belong to this archival object")
 
     event = PreservationEvent(
         archival_object_id=object_id,

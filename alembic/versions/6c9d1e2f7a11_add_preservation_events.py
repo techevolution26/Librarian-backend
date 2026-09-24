@@ -4,7 +4,6 @@ Revision ID: 6c9d1e2f7a11
 Revises: f4b8c2d91e55
 Create Date: 2026-09-24
 """
-
 from typing import Sequence, Union
 
 from alembic import op
@@ -24,41 +23,22 @@ def upgrade() -> None:
         sa.Column("asset_id", sa.Integer(), nullable=True),
         sa.Column("event_type", sa.String(length=40), nullable=False),
         sa.Column("event_date", sa.DateTime(timezone=True), nullable=False),
-        sa.Column(
-            "outcome", sa.String(length=20), nullable=False, server_default="unknown"
-        ),
+        sa.Column("outcome", sa.String(length=20), nullable=False, server_default="unknown"),
         sa.Column("agent", sa.String(length=255), nullable=True),
         sa.Column("detail", sa.Text(), nullable=True),
         sa.Column("source_storage_key", sa.String(length=500), nullable=True),
         sa.Column("target_storage_key", sa.String(length=500), nullable=True),
         sa.Column("checksum", sa.String(length=128), nullable=True),
         sa.Column("checksum_algorithm", sa.String(length=40), nullable=True),
-        sa.Column(
-            "created_at",
-            sa.DateTime(timezone=True),
-            nullable=False,
-            server_default=sa.func.now(),
-        ),
-        sa.ForeignKeyConstraint(
-            ["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"
-        ),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
+        sa.ForeignKeyConstraint(["archival_object_id"], ["archival_objects.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["asset_id"], ["book_assets.id"], ondelete="SET NULL"),
     )
     op.create_index("ix_preservation_events_id", "preservation_events", ["id"])
-    op.create_index(
-        "ix_preservation_events_archival_object_id",
-        "preservation_events",
-        ["archival_object_id"],
-    )
-    op.create_index(
-        "ix_preservation_events_asset_id", "preservation_events", ["asset_id"]
-    )
-    op.create_index(
-        "ix_preservation_events_event_type", "preservation_events", ["event_type"]
-    )
-    op.create_index(
-        "ix_preservation_events_event_date", "preservation_events", ["event_date"]
-    )
+    op.create_index("ix_preservation_events_archival_object_id", "preservation_events", ["archival_object_id"])
+    op.create_index("ix_preservation_events_asset_id", "preservation_events", ["asset_id"])
+    op.create_index("ix_preservation_events_event_type", "preservation_events", ["event_type"])
+    op.create_index("ix_preservation_events_event_date", "preservation_events", ["event_date"])
     op.create_index(
         "ix_preservation_events_object_date",
         "preservation_events",
@@ -109,14 +89,10 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("ix_preservation_events_type_date", table_name="preservation_events")
     op.drop_index("ix_preservation_events_asset_date", table_name="preservation_events")
-    op.drop_index(
-        "ix_preservation_events_object_date", table_name="preservation_events"
-    )
+    op.drop_index("ix_preservation_events_object_date", table_name="preservation_events")
     op.drop_index("ix_preservation_events_event_date", table_name="preservation_events")
     op.drop_index("ix_preservation_events_event_type", table_name="preservation_events")
     op.drop_index("ix_preservation_events_asset_id", table_name="preservation_events")
-    op.drop_index(
-        "ix_preservation_events_archival_object_id", table_name="preservation_events"
-    )
+    op.drop_index("ix_preservation_events_archival_object_id", table_name="preservation_events")
     op.drop_index("ix_preservation_events_id", table_name="preservation_events")
     op.drop_table("preservation_events")

@@ -37,19 +37,14 @@ class ArchivalRights(Base):
     download_allowed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     redistribution_allowed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     commercial_use_allowed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    verified_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     verified_by: Mapped[str | None] = mapped_column(String(255), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
 
     archival_object: Mapped["ArchivalObject"] = relationship(back_populates="rights")
