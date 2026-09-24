@@ -3,12 +3,26 @@ import math
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile ,Query
-from sqlalchemy import select, case, func ,or_
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    Query,
+)
+from sqlalchemy import select, case, func, or_
 from sqlalchemy.orm import Session
 from app.models.library_item import LibraryItem
 from app.core.database import get_db
-from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
+from app.core.storage import (
+    BOOKS_STORAGE_DIR,
+    COVERS_STORAGE_DIR,
+    build_public_file_url,
+    ensure_storage_dirs,
+)
 from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.models.book_asset import BookAsset
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
@@ -71,13 +85,13 @@ def to_resource_read(row: Book, *, include_assets: bool = False) -> BookRead:
 
 to_book_read = to_resource_read
 
+
 def public_books_stmt():
     return (
         select(Book)
         .where(Book.archived_at.is_(None))
         .where(Book.visibility == "published")
     )
-
 
 
 @router.get("/admin/list", response_model=AdminBookListRead)
@@ -121,9 +135,7 @@ def admin_list_books(
     safe_page = min(page, pages)
     offset = (safe_page - 1) * limit
 
-    rows = db.scalars(
-        stmt.order_by(Book.id.desc()).offset(offset).limit(limit)
-    ).all()
+    rows = db.scalars(stmt.order_by(Book.id.desc()).offset(offset).limit(limit)).all()
 
     return AdminBookListRead(
         items=[to_book_read(row) for row in rows],
@@ -162,7 +174,6 @@ def list_admin_activity(
     ]
 
 
-
 @router.get("/admin/{book_id}", response_model=BookRead)
 def admin_get_book(
     book_id: int,
@@ -177,7 +188,6 @@ def admin_get_book(
         raise HTTPException(status_code=404, detail="Book not found")
 
     return to_resource_read(row, include_assets=True)
-
 
 
 @router.get("/featured", response_model=BookRead)
@@ -214,8 +224,7 @@ def get_featured_book(db: Session = Depends(get_db)) -> BookRead:
         public_books_stmt()
         .outerjoin(
             LibraryItem,
-            (LibraryItem.book_id == Book.id)
-            & (LibraryItem.updated_at >= since),
+            (LibraryItem.book_id == Book.id) & (LibraryItem.updated_at >= since),
         )
         .group_by(Book.id)
         .order_by(
@@ -260,8 +269,7 @@ def list_trending_books(
         public_books_stmt()
         .outerjoin(
             LibraryItem,
-            (LibraryItem.book_id == Book.id)
-            & (LibraryItem.updated_at >= since),
+            (LibraryItem.book_id == Book.id) & (LibraryItem.updated_at >= since),
         )
         .group_by(Book.id)
         .order_by(trending_score.desc(), Book.rating.desc(), Book.id.desc())
@@ -285,10 +293,26 @@ def recommended_books(
     the user's library are excluded.
     """
     settings = current_user.settings
-    preferred_genres = {value.strip().lower() for value in (settings.preferred_genres or [])} if settings else set()
-    goals = {value.strip().lower() for value in (settings.reading_goals or [])} if settings else set()
-    styles = {value.strip().lower() for value in (settings.content_styles or [])} if settings else set()
-    lengths = {value.strip().lower() for value in (settings.preferred_lengths or [])} if settings else set()
+    preferred_genres = (
+        {value.strip().lower() for value in (settings.preferred_genres or [])}
+        if settings
+        else set()
+    )
+    goals = (
+        {value.strip().lower() for value in (settings.reading_goals or [])}
+        if settings
+        else set()
+    )
+    styles = (
+        {value.strip().lower() for value in (settings.content_styles or [])}
+        if settings
+        else set()
+    )
+    lengths = (
+        {value.strip().lower() for value in (settings.preferred_lengths or [])}
+        if settings
+        else set()
+    )
 
     library_rows = db.scalars(
         select(LibraryItem).where(LibraryItem.user_id == current_user.id)
@@ -336,13 +360,15 @@ def recommended_books(
     def text_matches(book: Book, vocabulary: set[str]) -> float:
         if not vocabulary:
             return 0.0
-        haystack = " ".join([
-            book.title,
-            book.description,
-            *book.genres,
-            *book.tags,
-            *book.subjects,
-        ]).lower()
+        haystack = " ".join(
+            [
+                book.title,
+                book.description,
+                *book.genres,
+                *book.tags,
+                *book.subjects,
+            ]
+        ).lower()
         return sum(1.0 for value in vocabulary if value and value in haystack)
 
     scored: list[tuple[float, Book]] = []
@@ -372,7 +398,9 @@ def recommended_books(
         )
         scored.append((score, book))
 
-    scored.sort(key=lambda item: (item[0], item[1].rating or 0, item[1].id), reverse=True)
+    scored.sort(
+        key=lambda item: (item[0], item[1].rating or 0, item[1].id), reverse=True
+    )
     return [to_book_read(book) for _, book in scored[:limit]]
 
 
@@ -451,7 +479,6 @@ def discover_books(
     return [to_book_read(row) for row in rows]
 
 
-
 @router.get("/genres", response_model=list[str])
 def list_book_genres(db: Session = Depends(get_db)) -> list[str]:
     rows = db.scalars(select(Book)).all()
@@ -497,18 +524,14 @@ def list_book_facets(db: Session = Depends(get_db)) -> BookFacets:
 
 @router.get("/", response_model=list[BookRead])
 def list_books(db: Session = Depends(get_db)) -> list[BookRead]:
-    rows = db.scalars(
-        public_books_stmt().order_by(Book.id.desc())
-    ).all()
+    rows = db.scalars(public_books_stmt().order_by(Book.id.desc())).all()
 
     return [to_book_read(row) for row in rows]
 
 
 @router.get("/{book_id}", response_model=BookRead)
 def get_book(book_id: int, db: Session = Depends(get_db)) -> BookRead:
-    row = db.scalar(
-        public_books_stmt().where(Book.id == book_id)
-    )
+    row = db.scalar(public_books_stmt().where(Book.id == book_id))
 
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
@@ -533,7 +556,9 @@ def set_featured_book(
         raise HTTPException(status_code=400, detail="Archived books cannot be featured")
 
     if book.visibility != "published":
-        raise HTTPException(status_code=400, detail="Only published books can be featured")
+        raise HTTPException(
+            status_code=400, detail="Only published books can be featured"
+        )
 
     db.query(Book).update({Book.is_featured: False})
     book.is_featured = True
@@ -589,13 +614,11 @@ def discover_stats(
     genre: str = "All",
     db: Session = Depends(get_db),
 ) -> dict[str, int]:
-    rows = discover_books(q=q, genre=genre, sort="recommended", limit=100, offset=0, db=db)
+    rows = discover_books(
+        q=q, genre=genre, sort="recommended", limit=100, offset=0, db=db
+    )
 
-    categories = {
-        genre_item
-        for book in rows
-        for genre_item in book.genre
-    }
+    categories = {genre_item for book in rows for genre_item in book.genre}
 
     return {
         "visible_books": len(rows),
@@ -607,9 +630,7 @@ def discover_stats(
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
 def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContentRead:
-    row = db.scalar(
-        public_books_stmt().where(Book.id == book_id)
-    )
+    row = db.scalar(public_books_stmt().where(Book.id == book_id))
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
 
@@ -622,8 +643,6 @@ def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContent
         source_url=row.source_url,
         content_text=row.content_text,
     )
-
-
 
 
 @router.post("/upload-pdf", response_model=BookRead, status_code=201)
@@ -679,7 +698,9 @@ async def upload_pdf_book(
 
     source_url = build_public_static_url(f"/static/books/{filename}", request)
 
-    cover_url = cover or build_public_static_url("/static/assets/book-placeholder.svg", request)
+    cover_url = cover or build_public_static_url(
+        "/static/assets/book-placeholder.svg", request
+    )
 
     book = Book(
         title=title,
@@ -715,6 +736,7 @@ async def upload_pdf_book(
     asset = BookAsset(
         book_id=book.id,
         asset_type="pdf",
+        asset_role="access",
         version=1,
         original_filename=pdf_file.filename or filename,
         storage_key=f"books/{filename}",
@@ -728,8 +750,12 @@ async def upload_pdf_book(
     db.add(asset)
 
     log_admin_activity(
-        db, current_user, action="book.pdf_uploaded", entity_type="book",
-        entity_id=book.id, metadata={"title": title, "filename": filename, "visibility": visibility},
+        db,
+        current_user,
+        action="book.pdf_uploaded",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": title, "filename": filename, "visibility": visibility},
     )
 
     try:
@@ -756,7 +782,10 @@ async def update_book_pdf_only(
 
     pdf_file = pdf_file or file
     if pdf_file is None:
-        raise HTTPException(status_code=400, detail="No PDF file was supplied. Expected multipart field 'pdf_file'.")
+        raise HTTPException(
+            status_code=400,
+            detail="No PDF file was supplied. Expected multipart field 'pdf_file'.",
+        )
 
     settings = get_settings()
 
@@ -790,19 +819,41 @@ async def update_book_pdf_only(
     book.digitized_at = datetime.now(timezone.utc)
 
     previous_assets = db.scalars(
-        select(BookAsset).where(BookAsset.book_id == book.id, BookAsset.asset_type == "pdf", BookAsset.is_current.is_(True))
+        select(BookAsset).where(
+            BookAsset.book_id == book.id,
+            BookAsset.asset_type == "pdf",
+            BookAsset.asset_role == "access",
+            BookAsset.is_current.is_(True),
+        )
     ).all()
     for previous in previous_assets:
         previous.is_current = False
-    previous_version = db.scalar(
-        select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "pdf")
-    ) or 0
-    db.add(BookAsset(
-        book_id=book.id, asset_type="pdf", version=previous_version + 1,
-        original_filename=pdf_file.filename or filename, storage_key=f"books/{filename}",
-        public_url=source_url, mime_type="application/pdf", size_bytes=destination.stat().st_size,
-        checksum_sha256=book.checksum_sha256 or compute_sha256(destination), uploaded_by=current_user.id, is_current=True,
-    ))
+    previous_version = (
+        db.scalar(
+            select(func.max(BookAsset.version)).where(
+                BookAsset.book_id == book.id,
+                BookAsset.asset_type == "pdf",
+                BookAsset.asset_role == "access",
+            )
+        )
+        or 0
+    )
+    db.add(
+        BookAsset(
+            book_id=book.id,
+            asset_type="pdf",
+            asset_role="access",
+            version=previous_version + 1,
+            original_filename=pdf_file.filename or filename,
+            storage_key=f"books/{filename}",
+            public_url=source_url,
+            mime_type="application/pdf",
+            size_bytes=destination.stat().st_size,
+            checksum_sha256=book.checksum_sha256 or compute_sha256(destination),
+            uploaded_by=current_user.id,
+            is_current=True,
+        )
+    )
 
     log_admin_activity(
         db,
@@ -914,8 +965,6 @@ def update_book_metadata(
     return to_resource_read(book)
 
 
-
-
 @router.post("/{book_id}/cover", response_model=BookRead)
 async def upload_book_cover(
     request: Request,
@@ -929,7 +978,10 @@ async def upload_book_cover(
 
     cover_file = cover_file or file
     if cover_file is None:
-        raise HTTPException(status_code=400, detail="No cover file was supplied. Expected multipart field 'cover_file'.")
+        raise HTTPException(
+            status_code=400,
+            detail="No cover file was supplied. Expected multipart field 'cover_file'.",
+        )
 
     book = db.scalar(select(Book).where(Book.id == book_id))
 
@@ -959,19 +1011,41 @@ async def upload_book_cover(
     book.cover_path = str(destination)
 
     previous_assets = db.scalars(
-        select(BookAsset).where(BookAsset.book_id == book.id, BookAsset.asset_type == "cover", BookAsset.is_current.is_(True))
+        select(BookAsset).where(
+            BookAsset.book_id == book.id,
+            BookAsset.asset_type == "cover",
+            BookAsset.asset_role == "access",
+            BookAsset.is_current.is_(True),
+        )
     ).all()
     for previous in previous_assets:
         previous.is_current = False
-    previous_version = db.scalar(
-        select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "cover")
-    ) or 0
-    db.add(BookAsset(
-        book_id=book.id, asset_type="cover", version=previous_version + 1,
-        original_filename=cover_file.filename or filename, storage_key=f"covers/{filename}",
-        public_url=cover_url, mime_type=cover_file.content_type or "image/jpeg", size_bytes=destination.stat().st_size,
-        checksum_sha256=compute_sha256(destination), uploaded_by=current_user.id, is_current=True,
-    ))
+    previous_version = (
+        db.scalar(
+            select(func.max(BookAsset.version)).where(
+                BookAsset.book_id == book.id,
+                BookAsset.asset_type == "cover",
+                BookAsset.asset_role == "access",
+            )
+        )
+        or 0
+    )
+    db.add(
+        BookAsset(
+            book_id=book.id,
+            asset_type="cover",
+            asset_role="access",
+            version=previous_version + 1,
+            original_filename=cover_file.filename or filename,
+            storage_key=f"covers/{filename}",
+            public_url=cover_url,
+            mime_type=cover_file.content_type or "image/jpeg",
+            size_bytes=destination.stat().st_size,
+            checksum_sha256=compute_sha256(destination),
+            uploaded_by=current_user.id,
+            is_current=True,
+        )
+    )
 
     log_admin_activity(
         db,
@@ -993,7 +1067,6 @@ async def upload_book_cover(
     return to_resource_read(book, include_assets=True)
 
 
-
 @router.patch("/{book_id}/publish", response_model=BookRead)
 def publish_book(
     book_id: int,
@@ -1005,11 +1078,22 @@ def publish_book(
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
     if book.archived_at is not None:
-        raise HTTPException(status_code=400, detail="Archived books cannot be published")
+        raise HTTPException(
+            status_code=400, detail="Archived books cannot be published"
+        )
     if not book.source_path:
-        raise HTTPException(status_code=400, detail="A digital document is required before publishing")
+        raise HTTPException(
+            status_code=400, detail="A digital document is required before publishing"
+        )
     book.visibility = "published"
-    log_admin_activity(db, current_user, action="book.published", entity_type="book", entity_id=book.id, metadata={"title": book.title})
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.published",
+        entity_type="book",
+        entity_id=book.id,
+        metadata={"title": book.title},
+    )
     db.commit()
     db.refresh(book)
     return to_resource_read(book, include_assets=True)
@@ -1043,7 +1127,6 @@ def archive_book(
     db.refresh(book)
 
     return to_book_read(book)
-
 
 
 @router.patch("/{book_id}/restore", response_model=BookRead)

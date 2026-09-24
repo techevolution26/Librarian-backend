@@ -5,9 +5,10 @@ from datetime import datetime
 class BookAssetRead(BaseModel):
     id: int
     asset_type: str
+    asset_role: str
     version: int
     original_filename: str
-    public_url: str
+    public_url: str | None
     mime_type: str
     size_bytes: int
     checksum_sha256: str
@@ -80,6 +81,7 @@ class ResourceContentRead(BaseModel):
 
 BookRead = ResourceRead
 BookContentRead = ResourceContentRead
+
 
 class AdminBookListRead(BaseModel):
     items: list[BookRead]
