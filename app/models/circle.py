@@ -20,14 +20,13 @@ class Circle(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(120), nullable=False, index=True)
-    slug: Mapped[str] = mapped_column(
-        String(160), nullable=False, unique=True, index=True
-    )
+    slug: Mapped[str] = mapped_column(String(160), nullable=False, unique=True, index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     visibility: Mapped[str] = mapped_column(String(20), default="private")
     join_policy: Mapped[str] = mapped_column(String(20), default="invite_only")
     join_conditions: Mapped[dict] = mapped_column(JSON, default=dict)
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    icon_key: Mapped[str] = mapped_column(String(40), default="book-open", nullable=False)
 
     owner_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"),

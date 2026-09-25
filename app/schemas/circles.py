@@ -47,6 +47,7 @@ class CircleRead(BaseModel):
     join_policy: str
     join_conditions: CircleJoinConditions
     avatar_url: str | None = None
+    icon_key: str = "book-open"
     owner: CircleOwnerRead
     is_member: bool = True
     created_at: datetime
@@ -69,6 +70,7 @@ class CircleUpdate(BaseModel):
     visibility: str | None = None
     join_policy: str | None = None
     join_conditions: CircleJoinConditions | None = None
+    icon_key: str | None = None
 
 
 class CircleInviteCreate(BaseModel):
@@ -84,6 +86,7 @@ class CirclePublicRead(BaseModel):
     join_policy: str
     join_conditions: CircleJoinConditions
     avatar_url: str | None = None
+    icon_key: str = "book-open"
     owner: CircleOwnerRead
     member_count: int
     book_count: int
