@@ -1,5 +1,6 @@
 import os
 import math
+import shutil
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
@@ -12,6 +13,7 @@ from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public
 from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.models.book_asset import BookAsset
 from app.models.asset_storage_location import AssetStorageLocation
+from app.models.preservation_event import PreservationEvent
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
 from app.models.user import User
 from app.core.authz import require_admin_user
@@ -133,6 +135,151 @@ def admin_list_books(
         limit=limit,
         pages=pages,
     )
+
+
+@router.post("/admin/{book_id}/assets/{asset_id}/preservation-master", response_model=BookRead)
+def create_preservation_master(
+    book_id: int,
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    """Create an explicit preservation-master copy from an existing asset.
+
+    This never relabels an access asset. The source remains unchanged and the
+    new master receives its own BookAsset identity, storage key, checksum,
+    storage location, and append-only preservation event.
+    """
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    source = db.scalar(
+        select(BookAsset).where(
+            BookAsset.id == asset_id,
+            BookAsset.book_id == book_id,
+        )
+    )
+    if not source:
+        raise HTTPException(status_code=404, detail="Source asset not found")
+
+    if source.asset_role == "preservation_master":
+        raise HTTPException(status_code=400, detail="Source asset is already a preservation master")
+
+    existing_master = db.scalar(
+        select(BookAsset).where(
+            BookAsset.book_id == book_id,
+            BookAsset.asset_type == source.asset_type,
+            BookAsset.asset_role == "preservation_master",
+            BookAsset.is_current.is_(True),
+        )
+    )
+    if existing_master:
+        raise HTTPException(
+            status_code=409,
+            detail="A current preservation master already exists for this asset type",
+        )
+
+    try:
+        from app.services.storage import get_storage_backend
+        resolved_source = get_storage_backend().resolve(source.storage_key)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if not resolved_source.is_file():
+        raise HTTPException(status_code=409, detail="Source asset is not available in physical storage")
+
+    master_dir = BOOKS_STORAGE_DIR / "preservation-masters" / str(book_id)
+    master_dir.mkdir(parents=True, exist_ok=True)
+    suffix = Path(source.original_filename).suffix.lower() or ".bin"
+    filename = f"{uuid4().hex}{suffix}"
+    destination = master_dir / filename
+    shutil.copy2(resolved_source, destination)
+
+    checksum = compute_sha256(destination)
+    if checksum.lower() != source.checksum_sha256.lower():
+        destination.unlink(missing_ok=True)
+        raise HTTPException(status_code=409, detail="Preservation copy checksum does not match source asset")
+
+    previous_version = db.scalar(
+        select(func.max(BookAsset.version)).where(
+            BookAsset.book_id == book_id,
+            BookAsset.asset_type == source.asset_type,
+            BookAsset.asset_role == "preservation_master",
+        )
+    ) or 0
+
+    master = BookAsset(
+        book_id=book_id,
+        asset_type=source.asset_type,
+        asset_role="preservation_master",
+        version=previous_version + 1,
+        original_filename=source.original_filename,
+        storage_key=f"books/preservation-masters/{book_id}/{filename}",
+        public_url=None,
+        mime_type=source.mime_type,
+        size_bytes=destination.stat().st_size,
+        checksum_sha256=checksum,
+        uploaded_by=current_user.id,
+        is_current=True,
+        source_asset_id=source.id,
+        derivation_type="preservation_copy",
+    )
+    db.add(master)
+    db.flush()
+
+    db.add(AssetStorageLocation(
+        asset_id=master.id,
+        provider="local",
+        storage_key=master.storage_key,
+        public_url=None,
+        status="active",
+        is_primary=True,
+        checksum_sha256=checksum,
+        size_bytes=master.size_bytes,
+    ))
+
+    object_id = db.scalar(select(Book.archival_object_id).where(Book.id == book_id))
+    if object_id is not None:
+        db.add(PreservationEvent(
+            archival_object_id=object_id,
+            asset_id=master.id,
+            event_type="preservation_master_created",
+            event_date=datetime.now(timezone.utc),
+            outcome="success",
+            agent=current_user.full_name or f"user:{current_user.id}",
+            detail=f"Preservation master created from asset {source.id} with verified SHA-256 match.",
+            source_storage_key=source.storage_key,
+            target_storage_key=master.storage_key,
+            checksum=checksum,
+            checksum_algorithm="SHA-256",
+        ))
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="book.preservation_master_created",
+        entity_type="book_asset",
+        entity_id=master.id,
+        metadata={
+            "book_id": book_id,
+            "source_asset_id": source.id,
+            "asset_type": source.asset_type,
+            "version": master.version,
+        },
+    )
+
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        destination.unlink(missing_ok=True)
+        raise
+
+    db.refresh(book)
+    return to_resource_read(book, include_assets=True)
 
 
 @router.get("/admin/activity")

@@ -25,7 +25,8 @@ class StorageBackend(Protocol):
         """Resolve a stored object for local filesystem operations."""
         ...
 
-    def exists(self, storage_key: str) -> bool: ...
+    def exists(self, storage_key: str) -> bool:
+        ...
 
 
 class LocalStorageBackend:
@@ -39,9 +40,7 @@ class LocalStorageBackend:
         try:
             candidate.relative_to(self.root)
         except ValueError as exc:
-            raise ValueError(
-                "Storage key resolves outside the configured storage root"
-            ) from exc
+            raise ValueError("Storage key resolves outside the configured storage root") from exc
         return candidate
 
     def exists(self, storage_key: str) -> bool:

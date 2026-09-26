@@ -13,6 +13,8 @@ class BookAssetRead(BaseModel):
     size_bytes: int
     checksum_sha256: str
     is_current: bool
+    source_asset_id: int | None = None
+    derivation_type: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

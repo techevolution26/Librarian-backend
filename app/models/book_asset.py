@@ -24,6 +24,7 @@ class BookAsset(Base):
             unique=True,
             postgresql_where=text("is_current = true"),
         ),
+        Index("ix_book_assets_source_asset_id", "source_asset_id"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
@@ -39,6 +40,10 @@ class BookAsset(Base):
     checksum_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
+    source_asset_id: Mapped[int | None] = mapped_column(
+        ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    derivation_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
 
     book = relationship("Book", back_populates="assets")
@@ -49,3 +54,5 @@ class BookAsset(Base):
         cascade="all, delete-orphan",
         order_by="AssetStorageLocation.created_at.asc()",
     )
+    source_asset = relationship("BookAsset", remote_side=[id], foreign_keys=[source_asset_id], back_populates="derived_assets")
+    derived_assets = relationship("BookAsset", foreign_keys=[source_asset_id], back_populates="source_asset")
