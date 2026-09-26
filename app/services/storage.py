@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import shutil
 from typing import Protocol
 
 from app.core.config import get_settings
@@ -28,6 +29,10 @@ class StorageBackend(Protocol):
     def exists(self, storage_key: str) -> bool:
         ...
 
+    def copy(self, source_key: str, target_key: str) -> None:
+        """Copy a stored object while preserving the backend boundary."""
+        ...
+
 
 class LocalStorageBackend:
     provider = "local"
@@ -45,6 +50,14 @@ class LocalStorageBackend:
 
     def exists(self, storage_key: str) -> bool:
         return self.resolve(storage_key).is_file()
+
+    def copy(self, source_key: str, target_key: str) -> None:
+        source = self.resolve(source_key)
+        target = self.resolve(target_key)
+        if not source.is_file():
+            raise FileNotFoundError(f"Source storage object does not exist: {source_key}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
 
 
 def get_storage_backend() -> StorageBackend:

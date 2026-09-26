@@ -10,6 +10,7 @@ from app.core.database import Base
 
 STORAGE_PROVIDERS = {"local", "object_storage"}
 STORAGE_LOCATION_STATUSES = {"active", "unavailable", "retired"}
+REPLICATION_STATUSES = {"none", "pending", "copying", "verified", "failed"}
 
 
 class AssetStorageLocation(Base):
@@ -39,6 +40,11 @@ class AssetStorageLocation(Base):
     public_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     is_primary: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
+    replicated_from_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("asset_storage_locations.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    replication_status: Mapped[str] = mapped_column(String(20), nullable=False, default="none", index=True)
+    replication_error: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -49,3 +55,14 @@ class AssetStorageLocation(Base):
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     asset = relationship("BookAsset", back_populates="storage_locations")
+    replicated_from = relationship(
+        "AssetStorageLocation",
+        remote_side=[id],
+        foreign_keys=[replicated_from_location_id],
+        back_populates="replicas",
+    )
+    replicas = relationship(
+        "AssetStorageLocation",
+        foreign_keys=[replicated_from_location_id],
+        back_populates="replicated_from",
+    )

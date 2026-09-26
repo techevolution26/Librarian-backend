@@ -20,6 +20,26 @@ class BookAssetRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AssetStorageLocationRead(BaseModel):
+    id: int
+    asset_id: int
+    provider: str
+    bucket: str | None = None
+    storage_key: str
+    public_url: str | None = None
+    status: str
+    is_primary: bool
+    replicated_from_location_id: int | None = None
+    replication_status: str
+    replication_error: str | None = None
+    checksum_sha256: str | None = None
+    size_bytes: int | None = None
+    created_at: datetime
+    verified_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class ResourceRead(BaseModel):
     id: int
     title: str

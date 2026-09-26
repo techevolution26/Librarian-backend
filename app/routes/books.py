@@ -14,7 +14,7 @@ from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.models.book_asset import BookAsset
 from app.models.asset_storage_location import AssetStorageLocation
 from app.models.preservation_event import PreservationEvent
-from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
+from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets, AssetStorageLocationRead
 from app.models.user import User
 from app.core.authz import require_admin_user
 from app.core.security import get_current_user
@@ -280,6 +280,212 @@ def create_preservation_master(
 
     db.refresh(book)
     return to_resource_read(book, include_assets=True)
+
+
+@router.get(
+    "/admin/{book_id}/assets/{asset_id}/storage-locations",
+    response_model=list[AssetStorageLocationRead],
+)
+def list_asset_storage_locations(
+    book_id: int,
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[AssetStorageLocationRead]:
+    """Return the physical storage copies recorded for one logical asset."""
+    require_admin_user(current_user)
+
+    asset = db.scalar(
+        select(BookAsset).where(BookAsset.id == asset_id, BookAsset.book_id == book_id)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    return list(
+        db.scalars(
+            select(AssetStorageLocation)
+            .where(AssetStorageLocation.asset_id == asset.id)
+            .order_by(AssetStorageLocation.is_primary.desc(), AssetStorageLocation.created_at.asc())
+        ).all()
+    )
+
+
+@router.post(
+    "/admin/{book_id}/assets/{asset_id}/replicas",
+    response_model=AssetStorageLocationRead,
+)
+def replicate_asset(
+    book_id: int,
+    asset_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> AssetStorageLocationRead:
+    """Create and verify a physical replica of a logical archival asset.
+
+    T3 deliberately supports the configured local backend only. The replica
+    is still recorded through the storage-location abstraction so a future
+    object-storage backend can implement the same operation without changing
+    BookAsset identity or the preservation model.
+    """
+    require_admin_user(current_user)
+
+    book = db.scalar(select(Book).where(Book.id == book_id))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    asset = db.scalar(
+        select(BookAsset).where(BookAsset.id == asset_id, BookAsset.book_id == book_id)
+    )
+    if not asset:
+        raise HTTPException(status_code=404, detail="Asset not found")
+
+    source_location = db.scalar(
+        select(AssetStorageLocation)
+        .where(
+            AssetStorageLocation.asset_id == asset.id,
+            AssetStorageLocation.status == "active",
+        )
+        .order_by(AssetStorageLocation.is_primary.desc(), AssetStorageLocation.created_at.asc())
+    )
+    if not source_location:
+        raise HTTPException(status_code=409, detail="No active physical storage location is available")
+
+    if source_location.provider != "local":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Replication provider '{source_location.provider}' has no copy implementation yet",
+        )
+
+    from app.services.storage import get_storage_backend
+
+    try:
+        backend = get_storage_backend()
+        source_path = backend.resolve(source_location.storage_key)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    if not source_path.is_file():
+        source_location.status = "unavailable"
+        source_location.replication_error = "Source storage object is not available"
+        source_location.replication_status = "failed"
+        db.commit()
+        raise HTTPException(status_code=409, detail="Source asset is not available in physical storage")
+
+    replica_key = f"books/replicas/{book_id}/{asset.id}/{uuid4().hex}{Path(asset.original_filename).suffix.lower() or '.bin'}"
+    replica = AssetStorageLocation(
+        asset_id=asset.id,
+        provider=source_location.provider,
+        bucket=source_location.bucket,
+        storage_key=replica_key,
+        public_url=None,
+        status="active",
+        is_primary=False,
+        replicated_from_location_id=source_location.id,
+        replication_status="copying",
+    )
+    db.add(replica)
+    db.flush()
+
+    target_created = False
+    try:
+        backend.copy(source_location.storage_key, replica_key)
+        target_created = True
+        target_path = backend.resolve(replica_key)
+        checksum = compute_sha256(target_path)
+        size_bytes = target_path.stat().st_size
+
+        if checksum.lower() != asset.checksum_sha256.lower():
+            raise ValueError("Replica checksum does not match the logical asset checksum")
+        if size_bytes != asset.size_bytes:
+            raise ValueError("Replica size does not match the logical asset size")
+
+        replica.checksum_sha256 = checksum
+        replica.size_bytes = size_bytes
+        replica.verified_at = datetime.now(timezone.utc)
+        replica.replication_status = "verified"
+        replica.replication_error = None
+
+        object_id = db.scalar(select(Book.archival_object_id).where(Book.id == book_id))
+        if object_id is not None:
+            db.add(PreservationEvent(
+                archival_object_id=object_id,
+                asset_id=asset.id,
+                event_type="storage_replication",
+                event_date=datetime.now(timezone.utc),
+                outcome="success",
+                agent=current_user.full_name or f"user:{current_user.id}",
+                detail=(
+                    f"Verified replica created from storage location {source_location.id}; "
+                    "SHA-256 and size match the logical asset."
+                ),
+                source_storage_key=source_location.storage_key,
+                target_storage_key=replica_key,
+                checksum=checksum,
+                checksum_algorithm="SHA-256",
+            ))
+
+        log_admin_activity(
+            db,
+            current_user,
+            action="book.asset_replicated",
+            entity_type="book_asset",
+            entity_id=asset.id,
+            metadata={
+                "book_id": book_id,
+                "asset_id": asset.id,
+                "source_location_id": source_location.id,
+                "replica_location_id": replica.id,
+                "provider": replica.provider,
+                "replication_status": replica.replication_status,
+            },
+        )
+        db.commit()
+        db.refresh(replica)
+        return replica
+    except Exception as exc:
+        db.rollback()
+        replica = db.get(AssetStorageLocation, replica.id)
+        if replica is None:
+            replica = AssetStorageLocation(
+                asset_id=asset.id,
+                provider=source_location.provider,
+                bucket=source_location.bucket,
+                storage_key=replica_key,
+                public_url=None,
+                status="retired",
+                is_primary=False,
+                replicated_from_location_id=source_location.id,
+                replication_status="failed",
+                replication_error=str(exc),
+            )
+            db.add(replica)
+        else:
+            replica.status = "retired"
+            replica.replication_status = "failed"
+            replica.replication_error = str(exc)
+
+        object_id = db.scalar(select(Book.archival_object_id).where(Book.id == book_id))
+        if object_id is not None:
+            db.add(PreservationEvent(
+                archival_object_id=object_id,
+                asset_id=asset.id,
+                event_type="storage_replication",
+                event_date=datetime.now(timezone.utc),
+                outcome="failure",
+                agent=current_user.full_name or f"user:{current_user.id}",
+                detail=f"Storage replication failed: {exc}",
+                source_storage_key=source_location.storage_key,
+                target_storage_key=replica_key,
+                checksum=None,
+                checksum_algorithm="SHA-256",
+            ))
+        db.commit()
+        if target_created:
+            try:
+                backend.resolve(replica_key).unlink(missing_ok=True)
+            except Exception:
+                pass
+        raise HTTPException(status_code=409, detail=f"Storage replication failed: {exc}") from exc
 
 
 @router.get("/admin/activity")
