@@ -57,6 +57,7 @@ class ResourceRead(BaseModel):
     mime_type: str | None = None
     visibility: str = "published"
     archived_at: datetime | None = None
+    archival_object_id: int | None = None
     cover_path: str | None = None
     is_featured: bool = False
 

@@ -54,6 +54,7 @@ def to_resource_read(row: Book, *, include_assets: bool = False) -> BookRead:
         mime_type=row.mime_type,
         visibility=getattr(row, "visibility", "published"),
         archived_at=getattr(row, "archived_at", None),
+        archival_object_id=getattr(row, "archival_object_id", None),
         cover_path=getattr(row, "cover_path", None),
         is_featured=getattr(row, "is_featured", False),
         accession_no=getattr(row, "accession_no", None),
