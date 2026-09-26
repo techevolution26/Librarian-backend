@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
-from app.routes import archival_objects
+from app.routes import archival_objects, invitations
 from app.routes import iiif, auth, books, library, profile, settings as settings_route, connections, circles, notifications, collections, preservation_events, fixity, bookmarks, notebook, highlights, quote_references
 from app.core.database import Base, engine
 from sqlalchemy import text
@@ -68,6 +68,7 @@ app.include_router(profile.router)
 app.include_router(settings_route.router)
 app.include_router(connections.router)
 app.include_router(circles.router)
+app.include_router(invitations.router)
 app.include_router(notifications.router)
 app.include_router(collections.router)
 app.include_router(archival_objects.router)

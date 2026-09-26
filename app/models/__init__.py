@@ -36,6 +36,8 @@ __all__ = [
     "CircleProgressUpdate",
     "UserConnection",
     "Notification",
+    "Invitation",
+    "InvitationUse",
     "Notebook",
     "Note",
     "Highlight",
@@ -50,3 +52,5 @@ from app.models.highlight import Highlight
 from app.models.quote_reference import QuoteReference
 
 from app.models.circle_join_request import CircleJoinRequest
+
+from app.models.invitation import Invitation, InvitationUse
