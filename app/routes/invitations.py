@@ -28,7 +28,7 @@ router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 INVITATION_TYPE_CIRCLE = "CIRCLE"
 INVITATION_RATE_LIMIT = 20
-INVITATION_URL_PREFIX = "librarian://circle-invite/"
+INVITATION_URL_PREFIX = "librarian:///circle-invite/"
 
 
 def _hash_token(token: str) -> str:

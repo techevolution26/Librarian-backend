@@ -11,3 +11,4 @@ __all__ = [
     "UserSettingsRead",
     "UserSettingsUpdate",
 ]
+from app.schemas.circle_annotations import CircleAnnotationCreate, CircleAnnotationRead, CircleAnnotationUpdate

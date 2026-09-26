@@ -11,6 +11,7 @@ from app.models.circle import Circle
 from app.models.circle_book import CircleBook
 from app.models.circle_member import CircleMember
 from app.models.circle_progress_update import CircleProgressUpdate
+from app.models.circle_annotation import CircleAnnotation
 from app.models.library_item import LibraryItem
 from app.models.notification import Notification
 from app.models.user import User
@@ -34,6 +35,7 @@ __all__ = [
     "CircleBook",
     "CircleMember",
     "CircleProgressUpdate",
+    "CircleAnnotation",
     "UserConnection",
     "Notification",
     "Invitation",
@@ -54,3 +56,4 @@ from app.models.quote_reference import QuoteReference
 from app.models.circle_join_request import CircleJoinRequest
 
 from app.models.invitation import Invitation, InvitationUse
+from app.models.circle_discussion import CircleDiscussion, CircleDiscussionReply
