@@ -2,19 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from app.core.storage import get_storage_root
+from app.services.storage import get_storage_backend
 from app.services.uploads import compute_sha256
 
 
 def resolve_storage_key(storage_key: str) -> Path:
     """Resolve an asset storage key without allowing path traversal."""
-    root = get_storage_root()
-    candidate = (root / storage_key).resolve()
-    try:
-        candidate.relative_to(root)
-    except ValueError as exc:
-        raise ValueError("Storage key resolves outside the configured storage root") from exc
-    return candidate
+    backend = get_storage_backend()
+    return backend.resolve(storage_key)
 
 
 def verify_asset_fixity(storage_key: str, expected_checksum: str) -> tuple[bool, str | None, str]:

@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["https://thelibrarian-sigma.vercel.app","https://thelibrarian-git-master-global-techresolute-app.vercel.app",]
     public_backend_url: str | None = None
     storage_dir: str = "storage"
+    storage_provider: str = "local"
     max_pdf_upload_mb: int = 150
     max_cover_upload_mb: int = 10
     max_avatar_upload_mb: int = 5

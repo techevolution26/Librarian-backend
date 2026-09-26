@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
 from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.models.book_asset import BookAsset
+from app.models.asset_storage_location import AssetStorageLocation
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets
 from app.models.user import User
 from app.core.authz import require_admin_user
@@ -727,6 +728,17 @@ async def upload_pdf_book(
         is_current=True,
     )
     db.add(asset)
+    db.flush()
+    db.add(AssetStorageLocation(
+        asset_id=asset.id,
+        provider="local",
+        storage_key=asset.storage_key,
+        public_url=asset.public_url,
+        status="active",
+        is_primary=True,
+        checksum_sha256=asset.checksum_sha256,
+        size_bytes=asset.size_bytes,
+    ))
 
     log_admin_activity(
         db, current_user, action="book.pdf_uploaded", entity_type="book",
@@ -798,11 +810,18 @@ async def update_book_pdf_only(
     previous_version = db.scalar(
         select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "pdf", BookAsset.asset_role == "access")
     ) or 0
-    db.add(BookAsset(
+    asset = BookAsset(
         book_id=book.id, asset_type="pdf", asset_role="access", version=previous_version + 1,
         original_filename=pdf_file.filename or filename, storage_key=f"books/{filename}",
         public_url=source_url, mime_type="application/pdf", size_bytes=destination.stat().st_size,
         checksum_sha256=book.checksum_sha256 or compute_sha256(destination), uploaded_by=current_user.id, is_current=True,
+    )
+    db.add(asset)
+    db.flush()
+    db.add(AssetStorageLocation(
+        asset_id=asset.id, provider="local", storage_key=asset.storage_key,
+        public_url=asset.public_url, status="active", is_primary=True,
+        checksum_sha256=asset.checksum_sha256, size_bytes=asset.size_bytes,
     ))
 
     log_admin_activity(
@@ -967,11 +986,18 @@ async def upload_book_cover(
     previous_version = db.scalar(
         select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "cover", BookAsset.asset_role == "access")
     ) or 0
-    db.add(BookAsset(
+    asset = BookAsset(
         book_id=book.id, asset_type="cover", asset_role="access", version=previous_version + 1,
         original_filename=cover_file.filename or filename, storage_key=f"covers/{filename}",
         public_url=cover_url, mime_type=cover_file.content_type or "image/jpeg", size_bytes=destination.stat().st_size,
         checksum_sha256=compute_sha256(destination), uploaded_by=current_user.id, is_current=True,
+    )
+    db.add(asset)
+    db.flush()
+    db.add(AssetStorageLocation(
+        asset_id=asset.id, provider="local", storage_key=asset.storage_key,
+        public_url=asset.public_url, status="active", is_primary=True,
+        checksum_sha256=asset.checksum_sha256, size_bytes=asset.size_bytes,
     ))
 
     log_admin_activity(

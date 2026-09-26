@@ -43,3 +43,9 @@ class BookAsset(Base):
 
     book = relationship("Book", back_populates="assets")
     uploader = relationship("User")
+    storage_locations = relationship(
+        "AssetStorageLocation",
+        back_populates="asset",
+        cascade="all, delete-orphan",
+        order_by="AssetStorageLocation.created_at.asc()",
+    )
