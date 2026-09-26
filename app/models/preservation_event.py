@@ -25,6 +25,8 @@ PRESERVATION_EVENT_TYPES = {
     "fixity_check",
     "access_copy_created",
     "preservation_master_created",
+    "ocr_created",
+    "ocr_verified",
 }
 
 PRESERVATION_EVENT_OUTCOMES = {

@@ -1,6 +1,7 @@
 from app.models.admin_activity_log import AdminActivityLog
 from app.models.archival_object import ArchivalObject
 from app.models.archival_canvas import ArchivalCanvas
+from app.models.archival_ocr import ArchivalOCRPage
 from app.models.archival_metadata import ArchivalMetadata
 from app.models.archival_provenance import ArchivalProvenance
 from app.models.archival_rights import ArchivalRights
@@ -24,6 +25,7 @@ __all__ = [
     "User",
     "ArchivalObject",
     "ArchivalCanvas",
+    "ArchivalOCRPage",
     "ArchivalMetadata",
     "ArchivalProvenance",
     "ArchivalRights",
