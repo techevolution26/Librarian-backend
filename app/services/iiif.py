@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from urllib.parse import urljoin
+from urllib.parse import quote, urljoin, urlsplit, urlunsplit
 
 from app.models.archival_canvas import ArchivalCanvas
 from app.models.archival_object import ArchivalObject
@@ -8,6 +8,7 @@ from app.schemas.iiif import (
     IIIFAnnotationPage,
     IIIFCanvas,
     IIIFImageBody,
+    IIIFImageService,
     IIIFLanguageMap,
     IIIFManifest,
     IIIFManifestMetadata,
@@ -26,58 +27,28 @@ def _metadata(profile: ArchivalObject) -> list[IIIFMetadataValue]:
 
     if structured:
         if structured.language:
-            metadata.append(
-                IIIFMetadataValue(label="Language", value=structured.language)
-            )
+            metadata.append(IIIFMetadataValue(label="Language", value=structured.language))
         if structured.genre:
-            metadata.append(
-                IIIFMetadataValue(label="Genre", value=", ".join(structured.genre))
-            )
+            metadata.append(IIIFMetadataValue(label="Genre", value=", ".join(structured.genre)))
         if structured.edition:
-            metadata.append(
-                IIIFMetadataValue(label="Edition", value=structured.edition)
-            )
+            metadata.append(IIIFMetadataValue(label="Edition", value=structured.edition))
         if structured.publisher:
-            metadata.append(
-                IIIFMetadataValue(label="Publisher", value=structured.publisher)
-            )
+            metadata.append(IIIFMetadataValue(label="Publisher", value=structured.publisher))
         if structured.publication_date:
-            metadata.append(
-                IIIFMetadataValue(
-                    label="Publication date", value=structured.publication_date
-                )
-            )
+            metadata.append(IIIFMetadataValue(label="Publication date", value=structured.publication_date))
         if structured.external_identifier:
-            metadata.append(
-                IIIFMetadataValue(
-                    label="External identifier", value=structured.external_identifier
-                )
-            )
+            metadata.append(IIIFMetadataValue(label="External identifier", value=structured.external_identifier))
 
     if profile.provenance:
         provenance = profile.provenance
         if provenance.source_institution:
-            metadata.append(
-                IIIFMetadataValue(
-                    label="Source institution", value=provenance.source_institution
-                )
-            )
+            metadata.append(IIIFMetadataValue(label="Source institution", value=provenance.source_institution))
         if provenance.source_collection:
-            metadata.append(
-                IIIFMetadataValue(
-                    label="Source collection", value=provenance.source_collection
-                )
-            )
+            metadata.append(IIIFMetadataValue(label="Source collection", value=provenance.source_collection))
         if provenance.shelfmark:
-            metadata.append(
-                IIIFMetadataValue(label="Shelfmark", value=provenance.shelfmark)
-            )
+            metadata.append(IIIFMetadataValue(label="Shelfmark", value=provenance.shelfmark))
         if provenance.accession_number:
-            metadata.append(
-                IIIFMetadataValue(
-                    label="Accession number", value=provenance.accession_number
-                )
-            )
+            metadata.append(IIIFMetadataValue(label="Accession number", value=provenance.accession_number))
 
     return metadata
 
@@ -92,9 +63,7 @@ def build_iiif_ready_profile(obj: ArchivalObject) -> IIIFReadyProfile:
 
     required_statement = None
     if rights and rights.rights_statement:
-        required_statement = IIIFMetadataValue(
-            label="Rights", value=rights.rights_statement
-        )
+        required_statement = IIIFMetadataValue(label="Rights", value=rights.rights_statement)
 
     provider: list[str] = []
     if rights and rights.rights_holder:
@@ -119,9 +88,7 @@ def _language_map(value: str) -> IIIFLanguageMap:
 
 def _manifest_metadata(obj: ArchivalObject) -> list[IIIFManifestMetadata]:
     return [
-        IIIFManifestMetadata(
-            label=_language_map(item.label), value=_language_map(item.value)
-        )
+        IIIFManifestMetadata(label=_language_map(item.label), value=_language_map(item.value))
         for item in _metadata(obj)
     ]
 
@@ -134,21 +101,36 @@ def _build_canvas(manifest_id: str, canvas: ArchivalCanvas) -> IIIFCanvas:
     annotation_pages: list[IIIFAnnotationPage] = []
     asset = canvas.asset
 
-    if asset and asset.public_url and asset.mime_type.startswith("image/"):
+    if (
+        asset
+        and asset.mime_type.startswith("image/")
+        and asset.asset_role == "access"
+        and asset.is_current
+        and (not canvas.archival_object.rights or canvas.archival_object.rights.view_allowed is not False)
+    ):
+        parsed_manifest = urlsplit(manifest_id)
+        service_id = urlunsplit(
+            (
+                parsed_manifest.scheme,
+                parsed_manifest.netloc,
+                f"/iiif/3/{quote(canvas.canvas_identifier, safe=':._-')}",
+                "",
+                "",
+            )
+        )
+        image_id = urljoin(service_id.rstrip("/") + "/", "full/max/0/default.jpg")
         annotation_pages.append(
             IIIFAnnotationPage(
                 id=urljoin(_canvas_id(manifest_id, canvas).rstrip("/") + "/", "page/1"),
                 items=[
                     IIIFPaintingAnnotation(
-                        id=urljoin(
-                            _canvas_id(manifest_id, canvas).rstrip("/") + "/",
-                            "annotation/1",
-                        ),
+                        id=urljoin(_canvas_id(manifest_id, canvas).rstrip("/") + "/", "annotation/1"),
                         body=IIIFImageBody(
-                            id=asset.public_url,
-                            format=asset.mime_type,
+                            id=image_id,
+                            format="image/jpeg",
                             width=canvas.width,
                             height=canvas.height,
+                            service=[IIIFImageService(id=service_id)],
                         ),
                     )
                 ],

@@ -32,9 +32,7 @@ def _public_object(object_id: int, db: Session) -> ArchivalObject:
 
 
 @router.get("/{object_id}/iiif/profile", response_model=IIIFReadyProfile)
-def get_iiif_ready_profile(
-    object_id: int, db: Session = Depends(get_db)
-) -> IIIFReadyProfile:
+def get_iiif_ready_profile(object_id: int, db: Session = Depends(get_db)) -> IIIFReadyProfile:
     return build_iiif_ready_profile(_public_object(object_id, db))
 
 

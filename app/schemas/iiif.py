@@ -17,17 +17,13 @@ class IIIFRights(BaseModel):
 class IIIFReadyProfile(BaseModel):
     """IIIF Presentation 3.0 preparation data, not a rendered manifest."""
 
-    id: str = Field(
-        description="Stable archival identifier suitable for an IIIF resource id."
-    )
+    id: str = Field(description="Stable archival identifier suitable for an IIIF resource id.")
     type: str = "Manifest"
     label: str
     description: str | None = None
     metadata: list[IIIFMetadataValue] = Field(default_factory=list)
     rights: IIIFRights = Field(default_factory=IIIFRights)
-    required_statement: IIIFMetadataValue | None = Field(
-        default=None, alias="requiredStatement"
-    )
+    required_statement: IIIFMetadataValue | None = Field(default=None, alias="requiredStatement")
     provider: list[str] = Field(default_factory=list)
     homepage: str | None = None
     see_also: list[str] = Field(default_factory=list)
@@ -63,12 +59,19 @@ class IIIFSeeAlso(BaseModel):
     format: str | None = None
 
 
+class IIIFImageService(BaseModel):
+    id: str
+    type: str = "ImageService3"
+    profile: str = "level1"
+
+
 class IIIFImageBody(BaseModel):
     id: str
     type: str = "Image"
     format: str
     width: int | None = None
     height: int | None = None
+    service: list[IIIFImageService] = Field(default_factory=list)
 
 
 class IIIFPaintingAnnotation(BaseModel):
@@ -110,9 +113,7 @@ class IIIFManifest(BaseModel):
     description: IIIFLanguageMap | None = None
     metadata: list[IIIFManifestMetadata] = Field(default_factory=list)
     rights: str | None = None
-    required_statement: IIIFRequiredStatement | None = Field(
-        default=None, alias="requiredStatement"
-    )
+    required_statement: IIIFRequiredStatement | None = Field(default=None, alias="requiredStatement")
     provider: list[IIIFProvider] = Field(default_factory=list)
     homepage: list[IIIFSeeAlso] | None = None
     see_also: list[IIIFSeeAlso] | None = Field(default=None, alias="seeAlso")
