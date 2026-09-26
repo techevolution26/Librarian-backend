@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.authz import require_admin_user
+from app.core.authz import require_admin_user, require_archival_curator
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.archival_object import ArchivalObject
@@ -13,7 +13,13 @@ from app.models.archival_provenance import ArchivalProvenance
 from app.models.archival_rights import ArchivalRights
 from app.models.collection import Collection
 from app.models.user import User
-from app.schemas.archival_object import ArchivalObjectCreate, ArchivalObjectRead, ArchivalObjectUpdate
+from app.schemas.archival_object import (
+    ArchivalObjectAdminRead,
+    ArchivalObjectCreate,
+    ArchivalObjectCuratorUpdate,
+    ArchivalObjectRead,
+    ArchivalObjectUpdate,
+)
 
 router = APIRouter(prefix="/archival-objects", tags=["archival-objects"])
 
@@ -27,6 +33,7 @@ def _read(row: ArchivalObject) -> ArchivalObjectRead:
         title=row.title,
         description=row.description,
         collection_id=row.collection_id,
+        curator_user_id=row.curator_user_id,
         visibility=row.visibility,
         archived_at=row.archived_at,
         created_at=row.created_at,
@@ -36,6 +43,10 @@ def _read(row: ArchivalObject) -> ArchivalObjectRead:
         provenance=row.provenance,
         rights=row.rights,
     )
+
+
+def _admin_read(row: ArchivalObject) -> ArchivalObjectAdminRead:
+    return ArchivalObjectAdminRead.model_validate({**_read(row).model_dump(), "curator_user_id": row.curator_user_id})
 
 
 @router.get("/", response_model=list[ArchivalObjectRead])
@@ -49,16 +60,20 @@ def list_archival_objects(db: Session = Depends(get_db)) -> list[ArchivalObjectR
     return [_read(row) for row in rows]
 
 
-@router.post("/admin", response_model=ArchivalObjectRead, status_code=201)
+@router.post("/admin", response_model=ArchivalObjectAdminRead, status_code=201)
 def create_archival_object(
     payload: ArchivalObjectCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> ArchivalObjectRead:
+) -> ArchivalObjectAdminRead:
     require_admin_user(current_user)
 
     if db.scalar(select(ArchivalObject).where(ArchivalObject.identifier == payload.identifier)):
         raise HTTPException(status_code=409, detail="Archival object identifier already exists")
+    if payload.curator_user_id is not None and not db.scalar(
+        select(User).where(User.id == payload.curator_user_id, User.is_active.is_(True))
+    ):
+        raise HTTPException(status_code=404, detail="Curator user not found")
     if payload.collection_id is not None and not db.scalar(
         select(Collection).where(Collection.id == payload.collection_id, Collection.archived_at.is_(None))
     ):
@@ -70,6 +85,7 @@ def create_archival_object(
         title=payload.title.strip(),
         description=payload.description,
         collection_id=payload.collection_id,
+        curator_user_id=payload.curator_user_id,
         visibility=payload.visibility,
     )
     if payload.metadata is not None:
@@ -81,32 +97,32 @@ def create_archival_object(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return _read(row)
+    return _admin_read(row)
 
 
-@router.get("/admin/list", response_model=list[ArchivalObjectRead])
+@router.get("/admin/list", response_model=list[ArchivalObjectAdminRead])
 def admin_list_archival_objects(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[ArchivalObjectRead]:
+) -> list[ArchivalObjectAdminRead]:
     require_admin_user(current_user)
     rows = db.scalars(
         select(ArchivalObject).order_by(ArchivalObject.updated_at.desc(), ArchivalObject.id.desc())
     ).all()
-    return [_read(row) for row in rows]
+    return [_admin_read(row) for row in rows]
 
 
-@router.patch("/admin/{object_id}", response_model=ArchivalObjectRead)
+@router.patch("/admin/{object_id}", response_model=ArchivalObjectAdminRead)
 def update_archival_object(
     object_id: int,
     payload: ArchivalObjectUpdate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> ArchivalObjectRead:
-    require_admin_user(current_user)
+) -> ArchivalObjectAdminRead:
     row = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
     if not row:
         raise HTTPException(status_code=404, detail="Archival object not found")
+    require_archival_curator(current_user, row.curator_user_id)
 
     updates = payload.model_dump(exclude_unset=True)
     metadata_payload = updates.pop("metadata", None)
@@ -159,24 +175,57 @@ def update_archival_object(
 
     db.commit()
     db.refresh(row)
-    return _read(row)
+    return _admin_read(row)
 
 
-@router.patch("/admin/{object_id}/archive", response_model=ArchivalObjectRead)
+@router.patch("/admin/{object_id}/archive", response_model=ArchivalObjectAdminRead)
 def archive_archival_object(
     object_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> ArchivalObjectRead:
-    require_admin_user(current_user)
+) -> ArchivalObjectAdminRead:
     row = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
     if not row:
         raise HTTPException(status_code=404, detail="Archival object not found")
+    require_archival_curator(current_user, row.curator_user_id)
     if row.archived_at is None:
         row.archived_at = datetime.now(timezone.utc)
         db.commit()
         db.refresh(row)
-    return _read(row)
+    return _admin_read(row)
+
+
+@router.patch("/admin/{object_id}/curator", response_model=ArchivalObjectAdminRead)
+def assign_archival_curator(
+    object_id: int,
+    payload: ArchivalObjectCuratorUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchivalObjectAdminRead:
+    """Assign or clear the explicit curator for an archival object.
+
+    Only a global admin can delegate archival authority. A community member's
+    Circle role never grants curator authority.
+    """
+    require_admin_user(current_user)
+    row = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
+    if not row:
+        raise HTTPException(status_code=404, detail="Archival object not found")
+
+    if payload.curator_user_id is not None:
+        curator = db.scalar(
+            select(User).where(User.id == payload.curator_user_id, User.is_active.is_(True))
+        )
+        if not curator:
+            raise HTTPException(status_code=404, detail="Curator user not found")
+        row.curator_user_id = curator.id
+    else:
+        row.curator_user_id = None
+
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _admin_read(row)
 
 
 @router.get("/pid/{persistent_identifier}", response_model=ArchivalObjectRead)

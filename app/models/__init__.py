@@ -38,6 +38,7 @@ __all__ = [
     "CircleAnnotation",
     "UserConnection",
     "Notification",
+    "CircleModerationReport",
     "Invitation",
     "InvitationUse",
     "Notebook",
@@ -57,3 +58,5 @@ from app.models.circle_join_request import CircleJoinRequest
 
 from app.models.invitation import Invitation, InvitationUse
 from app.models.circle_discussion import CircleDiscussion, CircleDiscussionReply
+
+from app.models.circle_moderation import CircleModerationReport

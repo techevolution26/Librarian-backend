@@ -28,12 +28,17 @@ class ArchivalObjectRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ArchivalObjectAdminRead(ArchivalObjectRead):
+    curator_user_id: int | None = None
+
+
 class ArchivalObjectCreate(BaseModel):
     identifier: str = Field(min_length=1, max_length=100)
     object_type: str = "other"
     title: str = Field(min_length=1, max_length=255)
     description: str | None = None
     collection_id: int | None = None
+    curator_user_id: int | None = None
     visibility: str = "draft"
     metadata: ArchivalMetadataUpdate | None = None
     provenance: ArchivalProvenanceUpdate | None = None
@@ -54,6 +59,10 @@ class ArchivalObjectCreate(BaseModel):
         if normalized not in ARCHIVAL_OBJECT_VISIBILITIES:
             raise ValueError("visibility must be draft, published, or restricted")
         return normalized
+
+
+class ArchivalObjectCuratorUpdate(BaseModel):
+    curator_user_id: int | None = None
 
 
 class ArchivalObjectUpdate(BaseModel):

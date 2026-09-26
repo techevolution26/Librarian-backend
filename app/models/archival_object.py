@@ -12,6 +12,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.book import Book
     from app.models.collection import Collection
+    from app.models.user import User
     from app.models.archival_metadata import ArchivalMetadata
     from app.models.archival_provenance import ArchivalProvenance
     from app.models.archival_rights import ArchivalRights
@@ -50,6 +51,9 @@ class ArchivalObject(Base):
     collection_id: Mapped[int | None] = mapped_column(
         ForeignKey("collections.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    curator_user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="draft", index=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -60,6 +64,7 @@ class ArchivalObject(Base):
     )
 
     collection: Mapped["Collection | None"] = relationship(back_populates="archival_objects")
+    curator: Mapped["User | None"] = relationship("User", foreign_keys=[curator_user_id])
     book: Mapped["Book | None"] = relationship(back_populates="archival_object", uselist=False)
     intellectual_metadata: Mapped["ArchivalMetadata | None"] = relationship(
         back_populates="archival_object", uselist=False, cascade="all, delete-orphan"
