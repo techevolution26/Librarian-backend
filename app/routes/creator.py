@@ -8,7 +8,9 @@ from app.core.security import get_current_user
 from app.models.creator_account import CreatorAccount
 from app.models.user import User
 from app.schemas.creator import CreatorAccountCreate, CreatorAccountRead, CreatorAccountUpdate, CreatorDashboardRead
+from app.schemas.creator_analytics import CreatorAnalyticsRead
 from app.services.creator import build_creator_dashboard
+from app.services.creator_analytics import build_creator_analytics
 
 router = APIRouter(prefix="/creator", tags=["creator"])
 
@@ -27,6 +29,15 @@ def _ensure_slug_available(db: Session, slug: str, account_id: int | None = None
     if db.scalar(query) is not None:
         raise HTTPException(status_code=409, detail="Creator slug is already in use")
 
+
+
+@router.get("/analytics", response_model=CreatorAnalyticsRead)
+def get_creator_analytics(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CreatorAnalyticsRead:
+    account = _get_owned_account(db, current_user.id)
+    return build_creator_analytics(db, account.id)
 
 
 @router.get("/me", response_model=CreatorAccountRead)
