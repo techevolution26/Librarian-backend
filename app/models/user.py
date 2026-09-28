@@ -29,3 +29,4 @@ class User(Base):
     settings = relationship("UserSettings", back_populates="user", cascade="all, delete-orphan", uselist=False)
     bookmarks = relationship("Bookmark", back_populates="user", cascade="all, delete-orphan")
     notebook = relationship("Notebook", back_populates="user", cascade="all, delete-orphan", uselist=False)
+    creator_account = relationship("CreatorAccount", back_populates="user", cascade="all, delete-orphan", uselist=False)

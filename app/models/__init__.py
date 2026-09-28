@@ -1,5 +1,6 @@
 from app.models.admin_activity_log import AdminActivityLog
 from app.models.archival_object import ArchivalObject
+from app.models.creator_account import CreatorAccount
 from app.models.archival_canvas import ArchivalCanvas
 from app.models.archival_ocr import ArchivalOCRPage
 from app.models.archival_metadata import ArchivalMetadata
@@ -24,6 +25,7 @@ from app.models.user_settings import UserSettings
 __all__ = [
     "User",
     "ArchivalObject",
+    "CreatorAccount",
     "ArchivalCanvas",
     "ArchivalOCRPage",
     "ArchivalMetadata",
@@ -51,6 +53,9 @@ __all__ = [
     "Note",
     "Highlight",
     "QuoteReference",
+    "CreatorHostedBook",
+    "CreatorPaidBook",
+    "CreatorLifetimeAccess",
 ]
 
 from app.models.preservation_event import PreservationEvent
@@ -66,3 +71,9 @@ from app.models.invitation import Invitation, InvitationUse
 from app.models.circle_discussion import CircleDiscussion, CircleDiscussionReply
 
 from app.models.circle_moderation import CircleModerationReport
+
+from app.models.creator_book_submission import CreatorBookSubmission
+from app.models.creator_rights_declaration import CreatorRightsDeclaration
+from app.models.creator_hosted_book import CreatorHostedBook
+from app.models.creator_paid_book import CreatorPaidBook
+from app.models.creator_lifetime_access import CreatorLifetimeAccess
