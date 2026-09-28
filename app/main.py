@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
 from app.routes import archival_objects, archival_canvases, archival_ocr, invitations, circle_annotations, circle_discussions, circle_moderation, iiif_image
-from app.routes import iiif, auth, books, library, profile, creator, creator_submissions, creator_hosted_books, creator_paid_books, creator_lifetime_access, creator_rights, settings as settings_route, connections, circles, notifications, collections, preservation_events, fixity, bookmarks, notebook, highlights, quote_references
+from app.routes import iiif, auth, books, library, profile, creator, creator_submissions, creator_hosted_books, creator_paid_books, creator_lifetime_access, creator_rights, creator_revenue, creator_payouts, settings as settings_route, connections, circles, notifications, collections, preservation_events, fixity, bookmarks, notebook, highlights, quote_references
 from app.core.database import Base, engine
 from sqlalchemy import text
 
@@ -71,6 +71,8 @@ app.include_router(creator_hosted_books.router)
 app.include_router(creator_paid_books.router)
 app.include_router(creator_lifetime_access.router)
 app.include_router(creator_rights.router)
+app.include_router(creator_revenue.router)
+app.include_router(creator_payouts.router)
 app.include_router(settings_route.router)
 app.include_router(connections.router)
 app.include_router(circles.router)

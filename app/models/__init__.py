@@ -56,6 +56,9 @@ __all__ = [
     "CreatorHostedBook",
     "CreatorPaidBook",
     "CreatorLifetimeAccess",
+    "CreatorRevenueLedgerEntry",
+    "CreatorPayout",
+    "CreatorPayoutAllocation",
 ]
 
 from app.models.preservation_event import PreservationEvent
@@ -77,3 +80,5 @@ from app.models.creator_rights_declaration import CreatorRightsDeclaration
 from app.models.creator_hosted_book import CreatorHostedBook
 from app.models.creator_paid_book import CreatorPaidBook
 from app.models.creator_lifetime_access import CreatorLifetimeAccess
+from app.models.creator_revenue_ledger import CreatorRevenueLedgerEntry
+from app.models.creator_payout import CreatorPayout, CreatorPayoutAllocation
