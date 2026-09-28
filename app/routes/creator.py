@@ -6,13 +6,75 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.creator_account import CreatorAccount
+from app.models.creator_hosted_book import CreatorHostedBook
+from app.models.book import Book
 from app.models.user import User
-from app.schemas.creator import CreatorAccountCreate, CreatorAccountRead, CreatorAccountUpdate, CreatorDashboardRead
+from app.schemas.creator import (
+    CreatorAccountCreate,
+    CreatorAccountRead,
+    CreatorAccountUpdate,
+    CreatorDashboardRead,
+    CreatorPublicBookRead,
+    CreatorPublicProfileRead,
+)
 from app.schemas.creator_analytics import CreatorAnalyticsRead
 from app.services.creator import build_creator_dashboard
 from app.services.creator_analytics import build_creator_analytics
 
 router = APIRouter(prefix="/creator", tags=["creator"])
+
+
+@router.get("/public/{slug}", response_model=CreatorPublicProfileRead)
+def get_public_creator_profile(
+    slug: str,
+    db: Session = Depends(get_db),
+) -> CreatorPublicProfileRead:
+    """Return the public creator identity and only explicitly published books.
+
+    Private creators, suspended creators, archived books, and draft catalog
+    records are intentionally indistinguishable from a missing profile.
+    """
+    account = db.scalar(
+        select(CreatorAccount).where(
+            CreatorAccount.slug == slug,
+            CreatorAccount.is_public.is_(True),
+            CreatorAccount.status == "active",
+        )
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Creator profile not found")
+
+    books = db.scalars(
+        select(Book)
+        .join(CreatorHostedBook, CreatorHostedBook.book_id == Book.id)
+        .where(
+            CreatorHostedBook.creator_account_id == account.id,
+            CreatorHostedBook.status == "hosted",
+            Book.visibility == "published",
+            Book.archived_at.is_(None),
+        )
+        .order_by(Book.id.desc())
+    ).unique().all()
+
+    return CreatorPublicProfileRead(
+        display_name=account.display_name,
+        slug=account.slug,
+        bio=account.bio,
+        website_url=account.website_url,
+        profile_image_url=account.profile_image_url,
+        books=[
+            CreatorPublicBookRead(
+                id=book.id,
+                title=book.title,
+                author=book.author,
+                cover=book.cover,
+                description=book.description,
+                pages=book.pages,
+                genre=book.genres,
+            )
+            for book in books
+        ],
+    )
 
 
 def _get_owned_account(db: Session, user_id: int) -> CreatorAccount:
@@ -29,6 +91,15 @@ def _ensure_slug_available(db: Session, slug: str, account_id: int | None = None
     if db.scalar(query) is not None:
         raise HTTPException(status_code=409, detail="Creator slug is already in use")
 
+
+
+@router.get("/me/public-url")
+def get_my_public_creator_url(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    account = _get_owned_account(db, current_user.id)
+    return {"slug": account.slug, "path": f"/creator/{account.slug}"}
 
 
 @router.get("/analytics", response_model=CreatorAnalyticsRead)

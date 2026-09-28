@@ -42,3 +42,24 @@ class CreatorDashboardRead(BaseModel):
     profile_completion_percent: int
     profile_complete: bool
     missing_profile_fields: list[str] = Field(default_factory=list)
+
+
+class CreatorPublicBookRead(BaseModel):
+    id: int
+    title: str
+    author: str
+    cover: str
+    description: str
+    pages: int
+    genre: list[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CreatorPublicProfileRead(BaseModel):
+    display_name: str
+    slug: str
+    bio: str | None
+    website_url: str | None
+    profile_image_url: str | None
+    books: list[CreatorPublicBookRead] = Field(default_factory=list)
