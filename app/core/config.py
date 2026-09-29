@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     max_cover_upload_mb: int = 10
     max_avatar_upload_mb: int = 5
 
+    stripe_secret_key: str | None = None
+    stripe_webhook_secret: str | None = None
+    stripe_success_url: str | None = None
+    stripe_cancel_url: str | None = None
+    stripe_portal_return_url: str | None = None
+
     secret_key: str
     access_token_expire_minutes: int = 60 * 24 * 7  # 7 days
     jwt_algorithm: str = "HS256"

@@ -45,6 +45,8 @@ class SubscriptionPlan(Base):
     billing_interval: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )

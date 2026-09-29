@@ -8,6 +8,7 @@ from app.models.book import Book
 from app.models.bookmark import Bookmark
 from app.models.user import User
 from app.schemas.bookmark import BookmarkCreate, BookmarkRead, BookmarkUpdate
+from app.services.bookmark_limits import get_bookmark_count
 
 router = APIRouter(prefix="/bookmarks", tags=["bookmarks"])
 
@@ -38,6 +39,15 @@ def list_bookmarks(
         query.order_by(Bookmark.page_number.asc().nulls_last(), Bookmark.created_at.asc(), Bookmark.id.asc())
     ).all()
     return [BookmarkRead.model_validate(row) for row in rows]
+
+
+@router.get("/usage")
+def bookmark_usage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    """Return current bookmark usage without assuming a subscription plan."""
+    return {"count": get_bookmark_count(db, user_id=current_user.id)}
 
 
 @router.get("/{bookmark_id}", response_model=BookmarkRead)

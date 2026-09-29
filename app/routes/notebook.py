@@ -12,6 +12,7 @@ from app.models.notebook import Notebook
 from app.models.user import User
 from app.schemas.note import NoteCreate, NoteRead, NoteUpdate
 from app.schemas.notebook import NotebookRead, NotebookUpdate
+from app.services.notebook_limits import get_notebook_note_count
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
 
@@ -83,6 +84,15 @@ def update_notebook(
     db.commit()
     db.refresh(notebook)
     return NotebookRead.model_validate(notebook)
+
+
+@router.get("/usage")
+def notebook_usage(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, int]:
+    """Return current private notebook-note usage without assuming a plan."""
+    return {"note_count": get_notebook_note_count(db, user_id=current_user.id)}
 
 
 @router.get("/notes", response_model=list[NoteRead])

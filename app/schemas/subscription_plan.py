@@ -14,6 +14,8 @@ class SubscriptionPlanCreate(BaseModel):
     billing_interval: str = "none"
     status: str = "draft"
     sort_order: int = Field(default=0, ge=0, le=2_147_483_647)
+    stripe_product_id: str | None = Field(default=None, max_length=255)
+    stripe_price_id: str | None = Field(default=None, max_length=255)
 
     @field_validator("code")
     @classmethod
@@ -54,6 +56,8 @@ class SubscriptionPlanUpdate(BaseModel):
     billing_interval: str | None = None
     status: str | None = None
     sort_order: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    stripe_product_id: str | None = Field(default=None, max_length=255)
+    stripe_price_id: str | None = Field(default=None, max_length=255)
 
     @field_validator("currency", mode="before")
     @classmethod
@@ -90,6 +94,8 @@ class SubscriptionPlanRead(BaseModel):
     billing_interval: str
     status: str
     sort_order: int
+    stripe_product_id: str | None
+    stripe_price_id: str | None
     created_at: datetime
     updated_at: datetime
     feature_limits: list[SubscriptionPlanFeatureLimitRead] = Field(default_factory=list)
