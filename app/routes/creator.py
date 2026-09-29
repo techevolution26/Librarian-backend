@@ -102,6 +102,15 @@ def get_my_public_creator_url(
     return {"slug": account.slug, "path": f"/creator/{account.slug}"}
 
 
+@router.get("/dashboard", response_model=CreatorDashboardRead)
+def get_creator_dashboard(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CreatorDashboardRead:
+    account = _get_owned_account(db, current_user.id)
+    return build_creator_dashboard(account)
+
+
 @router.get("/analytics", response_model=CreatorAnalyticsRead)
 def get_creator_analytics(
     db: Session = Depends(get_db),

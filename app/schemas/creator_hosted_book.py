@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreatorHostedBookRead(BaseModel):
@@ -20,3 +20,8 @@ class CreatorHostedBookRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class CreatorHostedBookListRead(BaseModel):
+    items: list[CreatorHostedBookRead] = Field(default_factory=list)
+    total: int = 0

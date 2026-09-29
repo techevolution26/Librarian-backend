@@ -17,10 +17,10 @@ from app.models.creator_book_submission import CreatorBookSubmission
 from app.models.creator_hosted_book import CreatorHostedBook
 from app.models.creator_rights_declaration import CreatorRightsDeclaration
 from app.models.user import User
-from app.schemas.creator_hosted_book import CreatorHostedBookRead
+from app.schemas.creator_hosted_book import CreatorHostedBookListRead, CreatorHostedBookRead
 from app.services.uploads import compute_sha256, save_upload_file, validate_upload_file
 
-router = APIRouter(prefix="/creator/submissions", tags=["creator-hosted-books"])
+router = APIRouter(prefix="/creator/hosted-books", tags=["creator-hosted-books"])
 
 
 def _owned_submission(db: Session, submission_id: int, user_id: int) -> CreatorBookSubmission:
@@ -87,7 +87,24 @@ def _owned_hosted(db: Session, submission_id: int, user_id: int) -> CreatorHoste
     return row
 
 
-@router.get("/{submission_id}/hosted-book", response_model=CreatorHostedBookRead)
+@router.get("/", response_model=CreatorHostedBookListRead)
+def list_my_hosted_books(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> CreatorHostedBookListRead:
+    rows = db.scalars(
+        select(CreatorHostedBook)
+        .join(CreatorAccount, CreatorAccount.id == CreatorHostedBook.creator_account_id)
+        .where(CreatorAccount.user_id == current_user.id)
+        .order_by(CreatorHostedBook.created_at.desc())
+    ).unique().all()
+    return CreatorHostedBookListRead(
+        items=[_read(db, row) for row in rows],
+        total=len(rows),
+    )
+
+
+@router.get("/submissions/{submission_id}/hosted-book", response_model=CreatorHostedBookRead)
 def get_hosted_book(
     submission_id: int,
     db: Session = Depends(get_db),
@@ -96,7 +113,7 @@ def get_hosted_book(
     return _read(db, _owned_hosted(db, submission_id, current_user.id))
 
 
-@router.post("/{submission_id}/hosted-book", response_model=CreatorHostedBookRead, status_code=status.HTTP_201_CREATED)
+@router.post("/submissions/{submission_id}/hosted-book", response_model=CreatorHostedBookRead, status_code=status.HTTP_201_CREATED)
 def create_hosted_book(
     submission_id: int,
     db: Session = Depends(get_db),
@@ -146,7 +163,7 @@ def create_hosted_book(
     return _read(db, hosted)
 
 
-@router.post("/{submission_id}/hosted-book/file", response_model=CreatorHostedBookRead)
+@router.post("/submissions/{submission_id}/hosted-book/file", response_model=CreatorHostedBookRead)
 async def upload_hosted_book_file(
     submission_id: int,
     pdf_file: UploadFile | None = File(None),
