@@ -59,6 +59,9 @@ __all__ = [
     "CreatorRevenueLedgerEntry",
     "CreatorPayout",
     "CreatorPayoutAllocation",
+    "Entitlement",
+    "SubscriptionPlan",
+    "SubscriptionPlanFeatureLimit",
 ]
 
 from app.models.preservation_event import PreservationEvent
@@ -82,3 +85,6 @@ from app.models.creator_paid_book import CreatorPaidBook
 from app.models.creator_lifetime_access import CreatorLifetimeAccess
 from app.models.creator_revenue_ledger import CreatorRevenueLedgerEntry
 from app.models.creator_payout import CreatorPayout, CreatorPayoutAllocation
+from app.models.entitlement import Entitlement
+from app.models.subscription_plan import SubscriptionPlan
+from app.models.subscription_plan_feature import SubscriptionPlanFeatureLimit

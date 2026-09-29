@@ -17,6 +17,7 @@ from app.models.creator_lifetime_access import (
 from app.models.creator_paid_book import CreatorPaidBook
 from app.models.user import User
 from app.schemas.creator_lifetime_access import CreatorLifetimeAccessRead
+from app.services.entitlements import grant_book_entitlement, revoke_book_entitlement
 
 router = APIRouter(prefix="/lifetime-access", tags=["lifetime-access"])
 
@@ -106,12 +107,30 @@ def admin_grant_lifetime_access(
     now = datetime.now(timezone.utc)
     if existing is not None:
         if existing.status == "active":
+            grant_book_entitlement(
+                db,
+                user_id=user_id,
+                book_id=hosted.book_id,
+                source="lifetime_access",
+                source_reference=f"creator_lifetime_access:{existing.id}",
+                starts_at=existing.granted_at,
+            )
+            db.commit()
+            db.refresh(existing)
             return _read(existing)
         existing.status = "active"
         existing.revoked_at = None
         existing.granted_at = now
         existing.paid_offer_id = paid_offer_id
         existing.access_source = access_source
+        grant_book_entitlement(
+            db,
+            user_id=user_id,
+            book_id=hosted.book_id,
+            source="lifetime_access",
+            source_reference=f"creator_lifetime_access:{existing.id}",
+            starts_at=existing.granted_at,
+        )
         db.commit()
         db.refresh(existing)
         return _read(existing)
@@ -125,6 +144,15 @@ def admin_grant_lifetime_access(
         granted_at=now,
     )
     db.add(row)
+    db.flush()
+    grant_book_entitlement(
+        db,
+        user_id=user_id,
+        book_id=hosted.book_id,
+        source="lifetime_access",
+        source_reference=f"creator_lifetime_access:{row.id}",
+        starts_at=row.granted_at,
+    )
     db.commit()
     db.refresh(row)
     return _read(row)
@@ -143,6 +171,13 @@ def admin_revoke_lifetime_access(
     if row.status == "active":
         row.status = "revoked"
         row.revoked_at = datetime.now(timezone.utc)
+        revoke_book_entitlement(
+            db,
+            user_id=row.user_id,
+            book_id=row.hosted_book.book_id,
+            source="lifetime_access",
+            source_reference=f"creator_lifetime_access:{row.id}",
+        )
         db.commit()
         db.refresh(row)
     return _read(row)
