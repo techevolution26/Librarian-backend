@@ -7,6 +7,7 @@ class CreatorLifetimeAccessRead(BaseModel):
     id: int
     user_id: int
     hosted_book_id: int
+    purchase_id: int | None
     paid_offer_id: int | None
     status: str
     access_source: str

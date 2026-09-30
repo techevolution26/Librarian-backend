@@ -15,6 +15,8 @@ from app.models.billing_webhook_event import BillingWebhookEvent
 from app.models.subscription import Subscription
 from app.models.subscription_plan import SubscriptionPlan
 from app.models.user import User
+from app.services.purchases import process_verified_stripe_purchase_event
+from app.services.institution import get_effective_institution_subscription
 
 
 ACTIVE_SUBSCRIPTION_STATUSES = {"active", "trialing"}
@@ -96,6 +98,15 @@ def get_effective_subscription(db: Session, user_id: int) -> Subscription | None
         )
         .order_by(Subscription.created_at.desc(), Subscription.id.desc())
     )
+
+
+def get_effective_plan(db: Session, user_id: int) -> SubscriptionPlan | None:
+    """Resolve direct subscription first, then an active institutional plan."""
+    direct = get_effective_subscription(db, user_id)
+    if direct is not None:
+        return direct.plan
+    institutional = get_effective_institution_subscription(db, user_id)
+    return institutional.plan if institutional is not None else None
 
 
 def create_checkout_session(db: Session, user: User, plan_code: str, idempotency_key: str) -> dict[str, str]:
@@ -280,16 +291,20 @@ def process_stripe_webhook(db: Session, payload: bytes, signature: str) -> str:
         if event_type in {"customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"}:
             sync_provider_subscription(db, data)
         elif event_type == "checkout.session.completed":
-            subscription_id = data.get("subscription")
-            if subscription_id:
-                row = db.scalar(
-                    select(Subscription).where(
-                        Subscription.provider == "stripe",
-                        Subscription.provider_subscription_id == str(subscription_id),
+            purchase = process_verified_stripe_purchase_event(db, event_type, data)
+            if purchase is None:
+                subscription_id = data.get("subscription")
+                if subscription_id:
+                    row = db.scalar(
+                        select(Subscription).where(
+                            Subscription.provider == "stripe",
+                            Subscription.provider_subscription_id == str(subscription_id),
+                        )
                     )
-                )
-                if row:
-                    row.checkout_session_id = str(data["id"])
+                    if row:
+                        row.checkout_session_id = str(data["id"])
+        elif event_type in {"checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed", "checkout.session.expired", "charge.refunded"}:
+            process_verified_stripe_purchase_event(db, event_type, data)
         elif event_type == "invoice.paid":
             subscription_id = data.get("subscription")
             if subscription_id:

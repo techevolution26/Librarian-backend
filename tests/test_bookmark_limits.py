@@ -251,3 +251,95 @@ def test_limit_lookup_uses_bookmark_count_key():
         resolved = get_bookmark_limit_for_plan(db, plan_id=plan.id)
         assert resolved is not None
         assert resolved.limit_value == 25
+
+
+def test_create_bookmark_enforces_active_plan_limit(monkeypatch):
+    from types import ModuleType, SimpleNamespace
+    import sys
+
+    if "passlib.context" not in sys.modules:
+        passlib = sys.modules.setdefault("passlib", ModuleType("passlib"))
+        context = ModuleType("passlib.context")
+        class _CryptContext:
+            def __init__(self, *args, **kwargs):
+                pass
+            def hash(self, value):
+                return value
+            def verify(self, value, hashed):
+                return value == hashed
+        context.CryptContext = _CryptContext
+        passlib.context = context
+        sys.modules["passlib.context"] = context
+    from fastapi import HTTPException
+    from app.routes.bookmarks import create_bookmark
+    from app.schemas.bookmark import BookmarkCreate
+    from app.models.book import Book
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[
+        User.__table__, Book.__table__, Bookmark.__table__,
+        SubscriptionPlan.__table__, SubscriptionPlanFeatureLimit.__table__,
+    ])
+    with Session(engine) as db:
+        user = User(full_name="Reader", email="route@example.com", password_hash="x")
+        plan = SubscriptionPlan(code="reader", name="Reader", price_amount_minor=0,
+                                currency="usd", billing_interval="none", status="active", sort_order=1)
+        book = Book(title="Book", author="Author", cover="cover", description="desc", visibility="published")
+        db.add_all([user, plan, book])
+        db.commit(); db.refresh(user); db.refresh(plan); db.refresh(book)
+        db.add(SubscriptionPlanFeatureLimit(plan_id=plan.id, feature_key=BOOKMARK_COUNT_FEATURE_KEY,
+                                            enabled=True, limit_value=1))
+        db.add(Bookmark(user_id=user.id, book_id=book.id, title="Existing"))
+        db.commit()
+        monkeypatch.setattr("app.routes.bookmarks.get_effective_subscription",
+                            lambda db, user_id: SimpleNamespace(plan_id=plan.id))
+        try:
+            create_bookmark(BookmarkCreate(book_id=book.id), db, user)
+            assert False, "creation should have been blocked at the ceiling"
+        except HTTPException as exc:
+            assert exc.status_code == 403
+            assert exc.detail["code"] == "bookmark_limit_reached"
+            assert exc.detail["count"] == 1
+            assert exc.detail["limit"] == 1
+
+
+def test_create_bookmark_allows_below_active_plan_limit(monkeypatch):
+    from types import ModuleType, SimpleNamespace
+    import sys
+
+    if "passlib.context" not in sys.modules:
+        passlib = sys.modules.setdefault("passlib", ModuleType("passlib"))
+        context = ModuleType("passlib.context")
+        class _CryptContext:
+            def __init__(self, *args, **kwargs):
+                pass
+            def hash(self, value):
+                return value
+            def verify(self, value, hashed):
+                return value == hashed
+        context.CryptContext = _CryptContext
+        passlib.context = context
+        sys.modules["passlib.context"] = context
+    from app.routes.bookmarks import create_bookmark
+    from app.schemas.bookmark import BookmarkCreate
+    from app.models.book import Book
+
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(engine, tables=[
+        User.__table__, Book.__table__, Bookmark.__table__,
+        SubscriptionPlan.__table__, SubscriptionPlanFeatureLimit.__table__,
+    ])
+    with Session(engine) as db:
+        user = User(full_name="Reader", email="route2@example.com", password_hash="x")
+        plan = SubscriptionPlan(code="reader", name="Reader", price_amount_minor=0,
+                                currency="usd", billing_interval="none", status="active", sort_order=1)
+        book = Book(title="Book", author="Author", cover="cover", description="desc", visibility="published")
+        db.add_all([user, plan, book]); db.commit(); db.refresh(user); db.refresh(plan); db.refresh(book)
+        db.add(SubscriptionPlanFeatureLimit(plan_id=plan.id, feature_key=BOOKMARK_COUNT_FEATURE_KEY,
+                                            enabled=True, limit_value=2))
+        db.add(Bookmark(user_id=user.id, book_id=book.id, title="Existing")); db.commit()
+        monkeypatch.setattr("app.routes.bookmarks.get_effective_subscription",
+                            lambda db, user_id: SimpleNamespace(plan_id=plan.id))
+        created = create_bookmark(BookmarkCreate(book_id=book.id), db, user)
+        assert created.title == "Bookmark"
+        assert get_bookmark_count(db, user_id=user.id) == 2

@@ -70,6 +70,8 @@ def create_plan(
         raise HTTPException(status_code=422, detail="A zero-price plan must use billing interval none")
     if payload.price_amount_minor > 0 and payload.billing_interval == "none":
         raise HTTPException(status_code=422, detail="A paid plan must specify a billing interval")
+    if payload.plan_type == "individual" and payload.seat_limit is not None:
+        raise HTTPException(status_code=422, detail="Seat limit is only valid for institutional plans")
 
     row = SubscriptionPlan(**payload.model_dump())
     db.add(row)
@@ -101,6 +103,10 @@ def update_plan(
         raise HTTPException(status_code=422, detail="A zero-price plan must use billing interval none")
     if price > 0 and interval == "none":
         raise HTTPException(status_code=422, detail="A paid plan must specify a billing interval")
+    plan_type = values.get("plan_type", row.plan_type)
+    seat_limit = values.get("seat_limit", row.seat_limit)
+    if plan_type == "individual" and seat_limit is not None:
+        raise HTTPException(status_code=422, detail="Seat limit is only valid for institutional plans")
 
     for key, value in values.items():
         setattr(row, key, value)

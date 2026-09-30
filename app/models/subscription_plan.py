@@ -10,6 +10,7 @@ from app.core.database import Base
 
 PLAN_STATUSES = {"draft", "active", "archived"}
 PLAN_BILLING_INTERVALS = {"none", "month", "year"}
+PLAN_TYPES = {"individual", "institutional"}
 
 
 class SubscriptionPlan(Base):
@@ -26,6 +27,8 @@ class SubscriptionPlan(Base):
         Index("ix_subscription_plans_status", "status"),
         Index("ix_subscription_plans_sort_order", "sort_order"),
         CheckConstraint("price_amount_minor >= 0", name="ck_subscription_plan_price_nonnegative"),
+        CheckConstraint("plan_type IN ('individual', 'institutional')", name="ck_subscription_plan_type"),
+        CheckConstraint("seat_limit IS NULL OR seat_limit > 0", name="ck_subscription_plan_seat_limit_positive"),
         CheckConstraint(
             "billing_interval IN ('none', 'month', 'year')",
             name="ck_subscription_plan_billing_interval",
@@ -45,6 +48,8 @@ class SubscriptionPlan(Base):
     billing_interval: Mapped[str] = mapped_column(String(20), nullable=False, default="none")
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="draft")
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    plan_type: Mapped[str] = mapped_column(String(20), nullable=False, default="individual")
+    seat_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
     stripe_product_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     stripe_price_id: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     created_at: Mapped[datetime] = mapped_column(

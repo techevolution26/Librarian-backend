@@ -12,7 +12,8 @@ from app.models.notebook import Notebook
 from app.models.user import User
 from app.schemas.note import NoteCreate, NoteRead, NoteUpdate
 from app.schemas.notebook import NotebookRead, NotebookUpdate
-from app.services.notebook_limits import get_notebook_note_count
+from app.services.notebook_limits import get_notebook_note_count, notebook_limit_allows_note_creation
+from app.services.subscription_billing import get_effective_plan, get_effective_subscription
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
 
@@ -125,8 +126,42 @@ def create_note(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> NoteRead:
-    notebook = get_or_create_notebook(db, current_user.id)
+    # Serialize per-user creation against concurrent requests so a finite
+    # notebook-note ceiling cannot be exceeded by two simultaneous inserts.
+    db.execute(select(User).where(User.id == current_user.id).with_for_update())
+
+    notebook = db.scalar(select(Notebook).where(Notebook.user_id == current_user.id))
+    if notebook is None:
+        notebook = Notebook(user_id=current_user.id, title="My Notebook")
+        db.add(notebook)
+        db.flush()
+
     validate_note_links(db, current_user.id, payload.book_id, payload.bookmark_id)
+
+    effective_subscription = get_effective_subscription(db, current_user.id)
+    effective_plan = None if effective_subscription is not None else get_effective_plan(db, current_user.id)
+    effective_plan_id = effective_subscription.plan_id if effective_subscription is not None else (effective_plan.id if effective_plan else None)
+    if effective_plan_id is not None:
+        allowed, current_count, limit = notebook_limit_allows_note_creation(
+            db,
+            user_id=current_user.id,
+            plan_id=effective_plan_id,
+        )
+        if not allowed:
+            detail = (
+                "Notebook note limit reached"
+                if limit is not None
+                else "Notebook notes are not enabled for your current plan"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "notebook_note_limit_reached",
+                    "message": detail,
+                    "count": current_count,
+                    "limit": limit,
+                },
+            )
     note = Note(
         notebook_id=notebook.id,
         book_id=payload.book_id,

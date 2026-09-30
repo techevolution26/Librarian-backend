@@ -28,6 +28,7 @@ def _read(row: CreatorLifetimeAccess) -> CreatorLifetimeAccessRead:
         id=row.id,
         user_id=row.user_id,
         hosted_book_id=row.hosted_book_id,
+        purchase_id=row.purchase_id,
         paid_offer_id=row.paid_offer_id,
         status=row.status,
         access_source=row.access_source,
@@ -82,8 +83,8 @@ def admin_grant_lifetime_access(
     current_user: User = Depends(get_current_user),
 ) -> CreatorLifetimeAccessRead:
     require_admin_user(current_user)
-    if access_source not in CREATOR_LIFETIME_ACCESS_SOURCES:
-        raise HTTPException(status_code=422, detail="Invalid lifetime access source")
+    if access_source not in CREATOR_LIFETIME_ACCESS_SOURCES or access_source == "purchase":
+        raise HTTPException(status_code=422, detail="Invalid lifetime access source for admin grant")
 
     user = db.get(User, user_id)
     hosted = db.get(CreatorHostedBook, hosted_book_id)
@@ -122,6 +123,7 @@ def admin_grant_lifetime_access(
         existing.revoked_at = None
         existing.granted_at = now
         existing.paid_offer_id = paid_offer_id
+        existing.purchase_id = None
         existing.access_source = access_source
         grant_book_entitlement(
             db,
@@ -138,6 +140,7 @@ def admin_grant_lifetime_access(
     row = CreatorLifetimeAccess(
         user_id=user_id,
         hosted_book_id=hosted_book_id,
+        purchase_id=None,
         paid_offer_id=paid_offer_id,
         status="active",
         access_source=access_source,

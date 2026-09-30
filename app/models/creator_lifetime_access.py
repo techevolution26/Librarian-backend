@@ -11,6 +11,7 @@ from app.core.database import Base
 if TYPE_CHECKING:
     from app.models.creator_hosted_book import CreatorHostedBook
     from app.models.creator_paid_book import CreatorPaidBook
+    from app.models.purchase import Purchase
     from app.models.user import User
 
 
@@ -29,15 +30,20 @@ class CreatorLifetimeAccess(Base):
     __tablename__ = "creator_lifetime_access"
     __table_args__ = (
         UniqueConstraint("user_id", "hosted_book_id", name="uq_creator_lifetime_access_user_hosted_book"),
+        UniqueConstraint("purchase_id", name="uq_creator_lifetime_access_purchase_id"),
         Index("ix_creator_lifetime_access_user_id", "user_id"),
         Index("ix_creator_lifetime_access_hosted_book_id", "hosted_book_id"),
         Index("ix_creator_lifetime_access_status", "status"),
+        Index("ix_creator_lifetime_access_purchase_id", "purchase_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     hosted_book_id: Mapped[int] = mapped_column(
         ForeignKey("creator_hosted_books.id", ondelete="RESTRICT"), nullable=False
+    )
+    purchase_id: Mapped[int | None] = mapped_column(
+        ForeignKey("purchases.id", ondelete="SET NULL"), nullable=True
     )
     paid_offer_id: Mapped[int | None] = mapped_column(
         ForeignKey("creator_paid_books.id", ondelete="SET NULL"), nullable=True
@@ -59,3 +65,4 @@ class CreatorLifetimeAccess(Base):
     user: Mapped["User"] = relationship()
     hosted_book: Mapped["CreatorHostedBook"] = relationship()
     paid_offer: Mapped["CreatorPaidBook | None"] = relationship()
+    purchase: Mapped["Purchase | None"] = relationship()

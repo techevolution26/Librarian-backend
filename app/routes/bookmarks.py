@@ -8,7 +8,8 @@ from app.models.book import Book
 from app.models.bookmark import Bookmark
 from app.models.user import User
 from app.schemas.bookmark import BookmarkCreate, BookmarkRead, BookmarkUpdate
-from app.services.bookmark_limits import get_bookmark_count
+from app.services.bookmark_limits import bookmark_limit_allows_creation, get_bookmark_count
+from app.services.subscription_billing import get_effective_plan, get_effective_subscription
 
 router = APIRouter(prefix="/bookmarks", tags=["bookmarks"])
 
@@ -74,6 +75,35 @@ def create_bookmark(
     )
     if not book:
         raise HTTPException(status_code=404, detail="Book not found")
+
+    # Serialize per-user creation against concurrent requests so a finite
+    # bookmark ceiling cannot be exceeded by two simultaneous inserts.
+    db.execute(select(User).where(User.id == current_user.id).with_for_update())
+
+    effective_subscription = get_effective_subscription(db, current_user.id)
+    effective_plan = None if effective_subscription is not None else get_effective_plan(db, current_user.id)
+    effective_plan_id = effective_subscription.plan_id if effective_subscription is not None else (effective_plan.id if effective_plan else None)
+    if effective_plan_id is not None:
+        allowed, current_count, limit = bookmark_limit_allows_creation(
+            db,
+            user_id=current_user.id,
+            plan_id=effective_plan_id,
+        )
+        if not allowed:
+            detail = (
+                "Bookmark limit reached"
+                if limit is not None
+                else "Bookmarks are not enabled for your current plan"
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "bookmark_limit_reached",
+                    "message": detail,
+                    "count": current_count,
+                    "limit": limit,
+                },
+            )
 
     bookmark = Bookmark(
         user_id=current_user.id,

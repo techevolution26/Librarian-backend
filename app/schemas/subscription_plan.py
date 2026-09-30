@@ -14,6 +14,8 @@ class SubscriptionPlanCreate(BaseModel):
     billing_interval: str = "none"
     status: str = "draft"
     sort_order: int = Field(default=0, ge=0, le=2_147_483_647)
+    plan_type: str = "individual"
+    seat_limit: int | None = Field(default=None, gt=0, le=2_147_483_647)
     stripe_product_id: str | None = Field(default=None, max_length=255)
     stripe_price_id: str | None = Field(default=None, max_length=255)
 
@@ -40,6 +42,13 @@ class SubscriptionPlanCreate(BaseModel):
             raise ValueError("Billing interval must be none, month, or year")
         return value
 
+    @field_validator("plan_type")
+    @classmethod
+    def validate_plan_type(cls, value: str) -> str:
+        if value not in {"individual", "institutional"}:
+            raise ValueError("Plan type must be individual or institutional")
+        return value
+
     @field_validator("status")
     @classmethod
     def validate_status(cls, value: str) -> str:
@@ -56,6 +65,8 @@ class SubscriptionPlanUpdate(BaseModel):
     billing_interval: str | None = None
     status: str | None = None
     sort_order: int | None = Field(default=None, ge=0, le=2_147_483_647)
+    plan_type: str | None = None
+    seat_limit: int | None = Field(default=None, gt=0, le=2_147_483_647)
     stripe_product_id: str | None = Field(default=None, max_length=255)
     stripe_price_id: str | None = Field(default=None, max_length=255)
 
@@ -84,6 +95,14 @@ class SubscriptionPlanUpdate(BaseModel):
         return value
 
 
+    @field_validator("plan_type")
+    @classmethod
+    def validate_plan_type(cls, value: str | None) -> str | None:
+        if value is not None and value not in {"individual", "institutional"}:
+            raise ValueError("Plan type must be individual or institutional")
+        return value
+
+
 class SubscriptionPlanRead(BaseModel):
     id: int
     code: str
@@ -94,6 +113,8 @@ class SubscriptionPlanRead(BaseModel):
     billing_interval: str
     status: str
     sort_order: int
+    plan_type: str
+    seat_limit: int | None
     stripe_product_id: str | None
     stripe_price_id: str | None
     created_at: datetime
