@@ -52,6 +52,9 @@ class CreatorPublicBookRead(BaseModel):
     description: str
     pages: int
     genre: list[str] = Field(default_factory=list)
+    paid_offer_id: int | None = None
+    price_amount_minor: int | None = None
+    currency: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

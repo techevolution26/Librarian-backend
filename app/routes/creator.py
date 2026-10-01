@@ -7,6 +7,7 @@ from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.creator_account import CreatorAccount
 from app.models.creator_hosted_book import CreatorHostedBook
+from app.models.creator_paid_book import CreatorPaidBook
 from app.models.book import Book
 from app.models.user import User
 from app.schemas.creator import (
@@ -44,9 +45,14 @@ def get_public_creator_profile(
     if account is None:
         raise HTTPException(status_code=404, detail="Creator profile not found")
 
-    books = db.scalars(
-        select(Book)
+    rows = db.execute(
+        select(Book, CreatorPaidBook)
         .join(CreatorHostedBook, CreatorHostedBook.book_id == Book.id)
+        .outerjoin(
+            CreatorPaidBook,
+            (CreatorPaidBook.hosted_book_id == CreatorHostedBook.id)
+            & (CreatorPaidBook.status == "active"),
+        )
         .where(
             CreatorHostedBook.creator_account_id == account.id,
             CreatorHostedBook.status == "hosted",
@@ -54,7 +60,7 @@ def get_public_creator_profile(
             Book.archived_at.is_(None),
         )
         .order_by(Book.id.desc())
-    ).unique().all()
+    ).all()
 
     return CreatorPublicProfileRead(
         display_name=account.display_name,
@@ -71,8 +77,11 @@ def get_public_creator_profile(
                 description=book.description,
                 pages=book.pages,
                 genre=book.genres,
+                paid_offer_id=offer.id if offer else None,
+                price_amount_minor=offer.price_amount_minor if offer else None,
+                currency=offer.currency if offer else None,
             )
-            for book in books
+            for book, offer in rows
         ],
     )
 
