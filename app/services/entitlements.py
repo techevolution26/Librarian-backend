@@ -6,6 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.book import Book
+from app.models.creator_hosted_book import CreatorHostedBook
+from app.models.creator_paid_book import CreatorPaidBook
 from app.models.entitlement import Entitlement
 
 
@@ -92,7 +94,17 @@ def resolve_book_access(db: Session, *, user_id: int, book_id: int) -> tuple[boo
         return False, "book_not_found", None
     if book.archived_at is not None:
         return False, "book_archived", None
-    if book.visibility == "published":
+
+    active_paid_offer = db.scalar(
+        select(CreatorPaidBook.id)
+        .join(CreatorHostedBook, CreatorHostedBook.id == CreatorPaidBook.hosted_book_id)
+        .where(
+            CreatorHostedBook.book_id == book.id,
+            CreatorHostedBook.status == "hosted",
+            CreatorPaidBook.status == "active",
+        )
+    )
+    if book.visibility == "published" and active_paid_offer is None:
         return True, "public", None
 
     now = _now()

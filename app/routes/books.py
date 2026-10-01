@@ -4,9 +4,10 @@ import shutil
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile ,Query
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query, status
 from sqlalchemy import select, case, func ,or_
 from sqlalchemy.orm import Session
+from fastapi.responses import FileResponse
 from app.models.library_item import LibraryItem
 from app.core.database import get_db
 from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public_file_url, ensure_storage_dirs
@@ -17,9 +18,10 @@ from app.models.preservation_event import PreservationEvent
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets, AssetStorageLocationRead
 from app.models.user import User
 from app.core.authz import require_admin_user
-from app.core.security import get_current_user
+from app.core.security import get_current_user, get_optional_current_user
 
 from app.services.admin_activity import log_admin_activity
+from app.services.entitlements import resolve_book_access
 from app.models.admin_activity_log import AdminActivityLog
 from app.services.uploads import (
     validate_upload_file,
@@ -82,6 +84,40 @@ def public_books_stmt():
         .where(Book.visibility == "published")
     )
 
+
+
+@router.get("/file/{filename:path}")
+def serve_book_file(
+    filename: str,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> FileResponse:
+    """Serve a book PDF only after the authoritative access decision."""
+    relative = Path(filename)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise HTTPException(status_code=404, detail="Book file not found")
+
+    candidate = (BOOKS_STORAGE_DIR / relative).resolve()
+    storage_root = BOOKS_STORAGE_DIR.resolve()
+    if storage_root not in candidate.parents or not candidate.is_file():
+        raise HTTPException(status_code=404, detail="Book file not found")
+
+    book = db.scalar(select(Book).where(Book.source_path == str(candidate)))
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book file not found")
+
+    if current_user is None:
+        allowed, reason, _ = resolve_book_access(db, user_id=0, book_id=book.id)
+    else:
+        allowed, reason, _ = resolve_book_access(db, user_id=current_user.id, book_id=book.id)
+    if not allowed:
+        status_code = status.HTTP_401_UNAUTHORIZED if current_user is None and reason == "entitlement_required" else status.HTTP_403_FORBIDDEN
+        raise HTTPException(
+            status_code=status_code,
+            detail={"code": reason, "message": "Book access is required to read this title."},
+        )
+
+    return FileResponse(candidate, media_type=book.mime_type or "application/pdf")
 
 
 @router.get("/admin/list", response_model=AdminBookListRead)
@@ -961,12 +997,24 @@ def discover_stats(
 
 
 @router.get("/{book_id}/content", response_model=BookContentRead)
-def get_book_content(book_id: int, db: Session = Depends(get_db)) -> BookContentRead:
+def get_book_content(
+    book_id: int,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> BookContentRead:
     row = db.scalar(
         public_books_stmt().where(Book.id == book_id)
     )
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
+
+    if current_user is None:
+        allowed, reason, _ = resolve_book_access(db, user_id=0, book_id=book_id)
+    else:
+        allowed, reason, _ = resolve_book_access(db, user_id=current_user.id, book_id=book_id)
+    if not allowed:
+        status_code = status.HTTP_401_UNAUTHORIZED if current_user is None and reason == "entitlement_required" else status.HTTP_403_FORBIDDEN
+        raise HTTPException(status_code=status_code, detail={"code": reason, "message": "Book access is required to read this title."})
 
     return BookContentRead(
         id=row.id,
@@ -1032,7 +1080,7 @@ async def upload_pdf_book(
         label="PDF",
     )
 
-    source_url = build_public_static_url(f"/static/books/{filename}", request)
+    source_url = build_public_static_url(f"/books/file/{filename}", request)
 
     cover_url = cover or build_public_static_url("/static/assets/book-placeholder.svg", request)
 
@@ -1147,7 +1195,7 @@ async def update_book_pdf_only(
         label="PDF",
     )
 
-    source_url = build_public_static_url(f"/static/books/{filename}", request)
+    source_url = build_public_static_url(f"/books/file/{filename}", request)
 
     book.source_type = "pdf"
     book.source_url = source_url

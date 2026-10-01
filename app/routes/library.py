@@ -1,11 +1,12 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.services.entitlements import resolve_book_access
 from app.models.book import Book
 from app.models.library_item import LibraryItem
 from app.models.user import User
@@ -202,6 +203,15 @@ def start_reading(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> LibraryItemRead:
+    allowed, reason, _ = resolve_book_access(
+        db, user_id=current_user.id, book_id=payload.book_id
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": reason, "message": "Book access is required before reading this title."},
+        )
+
     item = db.scalar(
         select(LibraryItem)
         .where(

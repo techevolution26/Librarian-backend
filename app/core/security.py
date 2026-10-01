@@ -110,3 +110,23 @@ def get_current_user(
         )
 
     return user
+
+def get_optional_current_user(
+    db: Session = Depends(get_db),
+    bearer_token: str | None = Depends(oauth2_scheme),
+    cookie_token: str | None = Cookie(default=None, alias="access_token"),
+) -> User | None:
+    """Resolve an authenticated user when credentials are present; otherwise return None."""
+    token = bearer_token or cookie_token
+    if not token:
+        return None
+
+    payload = decode_token(token)
+    subject = payload.get("sub")
+    if not subject:
+        return None
+
+    user = db.scalar(select(User).where(User.id == int(subject)))
+    if user is None or not user.is_active:
+        return None
+    return user

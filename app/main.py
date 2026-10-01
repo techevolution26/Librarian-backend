@@ -55,10 +55,18 @@ AVATAR_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 COVERS_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Mount static files
-app.mount("/static/books", StaticFiles(directory=BOOK_STORAGE_DIR), name="book-files")
 app.mount("/static/avatars", StaticFiles(directory=AVATAR_STORAGE_DIR), name="avatar-files")
 app.mount("/static/covers", StaticFiles(directory=COVERS_STORAGE_DIR), name="cover-files")
 app.mount("/static/assets", StaticFiles(directory=STATIC_ASSET_DIR), name="static-assets")
+
+# Protected compatibility route for previously-issued /static/books URLs.
+# New uploads use /books/file/{filename}; both paths enforce the same access decision.
+app.add_api_route(
+    "/static/books/{filename:path}",
+    books.serve_book_file,
+    methods=["GET"],
+    name="protected-book-file-legacy",
+)
 
 # Include Routers
 app.include_router(auth.router)
