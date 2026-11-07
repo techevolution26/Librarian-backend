@@ -48,3 +48,21 @@ A plan is not a subscription. A purchase is not an entitlement. An entitlement i
 - Assigned curator: explicit authority over assigned archival object.
 - Circle owner/admin: Circle moderation authority.
 - Community: no archival mutation authority.
+
+## Reader source anchors
+
+`ReaderSourceAnchor` is a private, user-owned locator that connects a Reader
+record to a precise source location without changing archival authority.
+Supported typed locators cover PDF page/text positions, stable IIIF canvas IDs,
+image regions, Book text spans, verified OCR spans, and bounded audio/video
+time ranges when an access media asset and duration exist.
+
+A source anchor snapshots the relevant archival persistent identifier, canvas
+identifier, asset version and SHA-256 checksum, and/or source-text SHA-256. A
+locator never stores a storage key or public/protected file URL. PDF anchors may
+also populate the legacy `page_number`; canvas, image, transcription, OCR and
+media locators must not be represented as Book pages.
+
+Bookmarks, highlights, private Notebook notes, and quote references may attach
+to an anchor. Existing page-only records remain valid. Circle annotations are
+independent, Circle-scoped community records and do not consume Reader anchors.

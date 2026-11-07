@@ -12,6 +12,7 @@ from app.models.user import User
 from app.schemas.highlight import HighlightCreate, HighlightRead, HighlightUpdate
 from app.schemas.note import NoteRead
 from app.routes.notebook import get_or_create_notebook
+from app.services.reader_source_anchors import get_owned_source_anchor, resolve_legacy_page_number
 
 router = APIRouter(prefix="/highlights", tags=["highlights"])
 
@@ -85,7 +86,8 @@ def develop_highlight(
         notebook_id=notebook.id,
         book_id=highlight.book_id,
         page_number=highlight.page_number,
-        title=f"Quote — Page {highlight.page_number}",
+        source_anchor_id=highlight.source_anchor_id,
+        title=(f"Quote — Page {highlight.page_number}" if highlight.page_number is not None else "Quote — Archival source"),
         body=f'“{highlight.selected_text.strip()}”\n\n',
     )
     db.add(note)
@@ -113,7 +115,12 @@ def create_highlight(
 ) -> HighlightRead:
     validate_book(db, payload.book_id)
     validate_note(db, payload.note_id, current_user.id, payload.book_id)
-    row = Highlight(user_id=current_user.id, **payload.model_dump())
+    source_anchor = get_owned_source_anchor(
+        db, source_anchor_id=payload.source_anchor_id, user_id=current_user.id, book_id=payload.book_id
+    )
+    data = payload.model_dump()
+    data["page_number"] = resolve_legacy_page_number(source_anchor, payload.page_number)
+    row = Highlight(user_id=current_user.id, **data)
     db.add(row)
     db.commit()
     db.refresh(row)
@@ -130,8 +137,29 @@ def update_highlight(
     row = owned_highlight(db, highlight_id, current_user.id)
     data = payload.model_dump(exclude_unset=True)
     validate_note(db, data.get("note_id", row.note_id), current_user.id, row.book_id)
+
+    anchor_id = data.get("source_anchor_id", row.source_anchor_id)
+    anchor = get_owned_source_anchor(
+        db, source_anchor_id=anchor_id, user_id=current_user.id, book_id=row.book_id
+    )
+    if "source_anchor_id" in data or "page_number" in data:
+        requested_page = data.get("page_number", row.page_number)
+        if (
+            anchor is not None
+            and anchor.locator_type not in {"pdf_page", "pdf_text"}
+            and "source_anchor_id" in data
+            and "page_number" not in data
+        ):
+            requested_page = None
+        row.page_number = resolve_legacy_page_number(anchor, requested_page)
+        row.source_anchor_id = anchor.id if anchor else None
+
+    if row.page_number is None and row.source_anchor_id is None:
+        raise HTTPException(status_code=400, detail="A highlight requires a page_number or source_anchor_id")
+
     for field, value in data.items():
-        setattr(row, field, value)
+        if field not in {"source_anchor_id", "page_number"}:
+            setattr(row, field, value)
     db.commit()
     db.refresh(row)
     return HighlightRead.model_validate(row)

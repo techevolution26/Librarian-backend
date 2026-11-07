@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from app.core.config import get_settings
 from app.core.storage import COVERS_STORAGE_DIR, ensure_storage_dirs
 from app.routes import archival_objects, archival_canvases, archival_ocr, invitations, circle_annotations, circle_discussions, circle_moderation, iiif_image
-from app.routes import iiif, auth, books, library, profile, creator, creator_submissions, creator_hosted_books, creator_paid_books, creator_lifetime_access, creator_rights, creator_revenue, creator_payouts, entitlements, settings as settings_route, connections, circles, notifications, collections, preservation_events, fixity, bookmarks, notebook, highlights, quote_references, subscription_plans, subscription_plan_features, reader_capabilities, subscription_billing, purchases, institutions
+from app.routes import iiif, auth, books, library, profile, creator, creator_submissions, creator_hosted_books, creator_paid_books, creator_lifetime_access, creator_rights, creator_revenue, creator_payouts, entitlements, settings as settings_route, connections, circles, notifications, collections, preservation_events, fixity, bookmarks, notebook, highlights, quote_references, subscription_plans, subscription_plan_features, reader_capabilities, subscription_billing, purchases, institutions, reader_source_anchors
 from app.core.database import Base, engine
 from sqlalchemy import text
 
@@ -30,6 +30,7 @@ app = FastAPI(
         {"name": "settings", "description": "The current user's app settings."},
         {"name": "notifications", "description": "Realtime and persisted in-app notifications."},
         {"name": "preservation", "description": "Append-only archival preservation history."},
+        {"name": "reader-source-anchors", "description": "Private, typed source locators for Reader research; separate from archival authority and Circle annotations."},
     ],
 )
 
@@ -108,6 +109,7 @@ app.include_router(bookmarks.router)
 app.include_router(notebook.router)
 app.include_router(highlights.router)
 app.include_router(quote_references.router)
+app.include_router(reader_source_anchors.router)
 
 # @app.on_event("startup")
 # def startup():

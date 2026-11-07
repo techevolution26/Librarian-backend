@@ -53,6 +53,7 @@ __all__ = [
     "Note",
     "Highlight",
     "QuoteReference",
+    "ReaderSourceAnchor",
     "CreatorHostedBook",
     "CreatorPaidBook",
     "CreatorLifetimeAccess",
@@ -77,6 +78,7 @@ from app.models.notebook import Notebook
 from app.models.note import Note
 from app.models.highlight import Highlight
 from app.models.quote_reference import QuoteReference
+from app.models.reader_source_anchor import ReaderSourceAnchor
 
 from app.models.circle_join_request import CircleJoinRequest
 

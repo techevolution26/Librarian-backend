@@ -16,6 +16,9 @@ class Note(Base):
     book_id: Mapped[int | None] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), nullable=True, index=True)
     bookmark_id: Mapped[int | None] = mapped_column(ForeignKey("bookmarks.id", ondelete="SET NULL"), nullable=True, index=True)
     page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_anchor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reader_source_anchors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     title: Mapped[str] = mapped_column(String(160), nullable=False, default="Untitled note")
     body: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -24,3 +27,4 @@ class Note(Base):
     notebook = relationship("Notebook", back_populates="notes")
     book = relationship("Book")
     bookmark = relationship("Bookmark")
+    source_anchor = relationship("ReaderSourceAnchor")

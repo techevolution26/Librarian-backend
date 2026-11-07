@@ -6,6 +6,7 @@ class NoteCreate(BaseModel):
     book_id: int | None = None
     bookmark_id: int | None = None
     page_number: int | None = Field(default=None, ge=1)
+    source_anchor_id: int | None = Field(default=None, gt=0)
     title: str = Field(default="Untitled note", min_length=1, max_length=160)
     body: str = Field(min_length=1, max_length=50000)
 
@@ -19,6 +20,7 @@ class NoteUpdate(BaseModel):
     book_id: int | None = None
     bookmark_id: int | None = None
     page_number: int | None = Field(default=None, ge=1)
+    source_anchor_id: int | None = Field(default=None, gt=0)
     title: str | None = Field(default=None, min_length=1, max_length=160)
     body: str | None = Field(default=None, min_length=1, max_length=50000)
 
@@ -36,6 +38,7 @@ class NoteRead(BaseModel):
     book_id: int | None = None
     bookmark_id: int | None = None
     page_number: int | None = None
+    source_anchor_id: int | None = None
     title: str
     body: str
     created_at: datetime

@@ -11,6 +11,7 @@ from app.models.notebook import Notebook
 from app.models.quote_reference import QuoteReference
 from app.models.user import User
 from app.schemas.quote_reference import QuoteReferenceCreate, QuoteReferenceRead, QuoteReferenceUpdate
+from app.services.reader_source_anchors import get_owned_source_anchor, resolve_legacy_page_number
 
 router = APIRouter(prefix="/quote-references", tags=["quote-references"])
 
@@ -32,14 +33,15 @@ def get_book(db: Session, book_id: int, *, active_only: bool = False) -> Book:
     return book
 
 
-def validate_note(db: Session, note_id: int | None, user_id: int, book_id: int) -> None:
+def validate_note(db: Session, note_id: int | None, user_id: int, book_id: int) -> Note | None:
     if note_id is None:
-        return
+        return None
     note = db.scalar(select(Note).join(Notebook).where(Note.id == note_id, Notebook.user_id == user_id))
     if not note:
         raise HTTPException(status_code=404, detail="Note not found")
     if note.book_id is not None and note.book_id != book_id:
         raise HTTPException(status_code=400, detail="Note does not belong to this book")
+    return note
 
 
 def validate_highlight(db: Session, highlight_id: int | None, user_id: int, book_id: int) -> Highlight | None:
@@ -61,6 +63,7 @@ def to_read(row: QuoteReference, book: Book) -> QuoteReferenceRead:
         book_id=row.book_id,
         highlight_id=row.highlight_id,
         note_id=row.note_id,
+        source_anchor_id=row.source_anchor_id,
         page_number=row.page_number,
         locator=row.locator,
         quote_text=row.quote_text,
@@ -110,9 +113,16 @@ def create_quote_reference(
 ) -> QuoteReferenceRead:
     book = get_book(db, payload.book_id, active_only=True)
     highlight = validate_highlight(db, payload.highlight_id, current_user.id, payload.book_id)
-    validate_note(db, payload.note_id, current_user.id, payload.book_id)
+    note = validate_note(db, payload.note_id, current_user.id, payload.book_id)
 
-    page_number = payload.page_number or (highlight.page_number if highlight else None)
+    anchor_id = payload.source_anchor_id
+    if anchor_id is None:
+        anchor_id = highlight.source_anchor_id if highlight else (note.source_anchor_id if note else None)
+    anchor = get_owned_source_anchor(
+        db, source_anchor_id=anchor_id, user_id=current_user.id, book_id=payload.book_id
+    )
+    requested_page = payload.page_number or (highlight.page_number if highlight else None)
+    page_number = resolve_legacy_page_number(anchor, requested_page)
     locator = payload.locator or (highlight.position if highlight else None)
     quote_text = payload.quote_text
     row = QuoteReference(
@@ -120,6 +130,7 @@ def create_quote_reference(
         book_id=payload.book_id,
         highlight_id=payload.highlight_id,
         note_id=payload.note_id,
+        source_anchor_id=anchor.id if anchor else None,
         page_number=page_number,
         locator=locator,
         quote_text=quote_text,
@@ -141,9 +152,34 @@ def update_quote_reference(
     get_book(db, row.book_id)
     data = payload.model_dump(exclude_unset=True)
     if "note_id" in data:
-        validate_note(db, data["note_id"], current_user.id, row.book_id)
+        note = validate_note(db, data["note_id"], current_user.id, row.book_id)
+        if "source_anchor_id" not in data and note is not None and note.source_anchor_id is not None:
+            data["source_anchor_id"] = note.source_anchor_id
+    if "source_anchor_id" in data:
+        anchor = get_owned_source_anchor(
+            db, source_anchor_id=data["source_anchor_id"], user_id=current_user.id, book_id=row.book_id
+        )
+        if anchor is not None:
+            requested_page = data.get("page_number", row.page_number)
+            if anchor.locator_type not in {"pdf_page", "pdf_text"} and "page_number" not in data:
+                requested_page = None
+            row.page_number = resolve_legacy_page_number(anchor, requested_page)
+        else:
+            row.source_anchor_id = None
+    if "page_number" in data and "source_anchor_id" not in data and row.source_anchor_id is not None:
+        anchor = get_owned_source_anchor(
+            db, source_anchor_id=row.source_anchor_id, user_id=current_user.id, book_id=row.book_id
+        )
+        row.page_number = resolve_legacy_page_number(anchor, data["page_number"])
     for field, value in data.items():
-        setattr(row, field, value)
+        if field not in {"source_anchor_id", "page_number"}:
+            setattr(row, field, value)
+    if "source_anchor_id" in data and data["source_anchor_id"] is not None:
+        row.source_anchor_id = data["source_anchor_id"]
+    elif "source_anchor_id" in data:
+        row.source_anchor_id = None
+    if "page_number" in data and row.source_anchor_id is None:
+        row.page_number = data["page_number"]
     db.commit()
     db.refresh(row)
     return to_read(row, get_book(db, row.book_id))

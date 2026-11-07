@@ -1,15 +1,22 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class HighlightCreate(BaseModel):
     book_id: int
-    page_number: int = Field(ge=1)
+    page_number: int | None = Field(default=None, ge=1)
     selected_text: str = Field(min_length=1, max_length=20000)
     position: str | None = Field(default=None, max_length=10000)
     color: str = Field(default="gold", max_length=24)
     note_id: int | None = None
+    source_anchor_id: int | None = Field(default=None, gt=0)
+
+    @model_validator(mode="after")
+    def require_location(self) -> "HighlightCreate":
+        if self.page_number is None and self.source_anchor_id is None:
+            raise ValueError("A highlight requires a page_number or source_anchor_id")
+        return self
 
     @field_validator("selected_text", "color")
     @classmethod
@@ -22,6 +29,8 @@ class HighlightUpdate(BaseModel):
     position: str | None = Field(default=None, max_length=10000)
     color: str | None = Field(default=None, max_length=24)
     note_id: int | None = None
+    page_number: int | None = Field(default=None, ge=1)
+    source_anchor_id: int | None = Field(default=None, gt=0)
 
     @field_validator("selected_text", "color")
     @classmethod
@@ -34,7 +43,8 @@ class HighlightRead(BaseModel):
     user_id: int
     book_id: int
     note_id: int | None = None
-    page_number: int
+    page_number: int | None = None
+    source_anchor_id: int | None = None
     selected_text: str
     position: str | None = None
     color: str

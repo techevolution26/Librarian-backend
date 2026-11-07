@@ -7,6 +7,7 @@ class QuoteReferenceCreate(BaseModel):
     book_id: int
     highlight_id: int | None = None
     note_id: int | None = None
+    source_anchor_id: int | None = Field(default=None, gt=0)
     page_number: int | None = Field(default=None, ge=1)
     locator: str | None = Field(default=None, max_length=10000)
     quote_text: str = Field(min_length=1, max_length=20000)
@@ -19,6 +20,7 @@ class QuoteReferenceCreate(BaseModel):
 
 class QuoteReferenceUpdate(BaseModel):
     note_id: int | None = None
+    source_anchor_id: int | None = Field(default=None, gt=0)
     page_number: int | None = Field(default=None, ge=1)
     locator: str | None = Field(default=None, max_length=10000)
     quote_text: str | None = Field(default=None, min_length=1, max_length=20000)
@@ -35,6 +37,7 @@ class QuoteReferenceRead(BaseModel):
     book_id: int
     highlight_id: int | None = None
     note_id: int | None = None
+    source_anchor_id: int | None = None
     page_number: int | None = None
     locator: str | None = None
     quote_text: str

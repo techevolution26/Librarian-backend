@@ -41,7 +41,7 @@ class BookAsset(Base):
     uploaded_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True)
     is_current: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, index=True)
     source_asset_id: Mapped[int | None] = mapped_column(
-        ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True
     )
     derivation_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)

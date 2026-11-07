@@ -42,3 +42,25 @@ Checkpoint notes historically recorded focused tests, compilation, migration hea
 
 - Consolidated historical checkpoint markdown into `docs/` and removed stale per-tackle root files.
 - Backend documentation is now organized as README, ARCHITECTURE, DEVELOPMENT, ROADMAP, DOMAINS, and CHECKPOINTS.
+
+## Sprint 7 — T5 Source-native Reader anchors (2026-11-06)
+
+Implemented an additive `ReaderSourceAnchor` model and `/reader/source-anchors`
+API. Typed locators distinguish PDF page and page-local text, IIIF canvas,
+image region, Book text span, verified OCR span, and bounded audio/video time
+ranges. Anchors preserve source persistent identifiers, canvas identifiers,
+asset version/checksum, and/or transcription checksum as immutable snapshots.
+
+Bookmarks, highlights, private Notebook notes, and quote references can attach
+to user-owned anchors. Existing `book_id` and `page_number` fields remain
+available; only PDF anchors populate the legacy page field. Circle annotations
+were not modified. The Alembic revision is
+`e4b7c9d2a601_add_reader_source_anchors.py`, based on
+`d1e2f3a4b5c6`.
+
+Focused validation: 13 source-anchor tests pass. Full suite, production
+PostgreSQL migration execution, and native client integration remain to be
+verified in the project environment. The repository's local `.env` is
+intentionally not included in generated source checkpoints; use `.env.example`
+for local setup. The `storage/` directory and its PDF files were excluded from
+this tackle and checkpoint.

@@ -9,10 +9,12 @@ from app.models.book import Book
 from app.models.bookmark import Bookmark
 from app.models.note import Note
 from app.models.notebook import Notebook
+from app.models.reader_source_anchor import ReaderSourceAnchor
 from app.models.user import User
 from app.schemas.note import NoteCreate, NoteRead, NoteUpdate
 from app.schemas.notebook import NotebookRead, NotebookUpdate
 from app.services.notebook_limits import get_notebook_note_count, notebook_limit_allows_note_creation
+from app.services.reader_source_anchors import get_owned_source_anchor, resolve_legacy_page_number
 from app.services.subscription_billing import get_effective_plan, get_effective_subscription
 
 router = APIRouter(prefix="/notebook", tags=["notebook"])
@@ -53,19 +55,37 @@ def validate_note_links(
     user_id: int,
     book_id: int | None,
     bookmark_id: int | None,
-) -> None:
+    source_anchor_id: int | None = None,
+    *,
+    inherit_bookmark_anchor: bool = True,
+) -> tuple[int | None, int | None, Bookmark | None, ReaderSourceAnchor | None]:
+    bookmark = None
     if bookmark_id is not None:
-        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id))
+        bookmark = db.scalar(
+            select(Bookmark).where(Bookmark.id == bookmark_id, Bookmark.user_id == user_id)
+        )
         if not bookmark:
             raise HTTPException(status_code=404, detail="Bookmark not found")
         if book_id is not None and bookmark.book_id != book_id:
             raise HTTPException(status_code=400, detail="Bookmark does not belong to this book")
         book_id = bookmark.book_id
+        if source_anchor_id is None and inherit_bookmark_anchor:
+            source_anchor_id = bookmark.source_anchor_id
+
+    anchor = get_owned_source_anchor(
+        db, source_anchor_id=source_anchor_id, user_id=user_id, book_id=book_id
+    )
+    if anchor is not None:
+        if book_id is not None and anchor.book_id != book_id:
+            raise HTTPException(status_code=400, detail="Source anchor does not belong to this book")
+        book_id = anchor.book_id
 
     if book_id is not None:
         book = db.scalar(select(Book).where(Book.id == book_id, Book.archived_at.is_(None)))
         if not book:
             raise HTTPException(status_code=404, detail="Book not found")
+
+    return book_id, (anchor.id if anchor else None), bookmark, anchor
 
 
 @router.get("", response_model=NotebookRead)
@@ -136,7 +156,16 @@ def create_note(
         db.add(notebook)
         db.flush()
 
-    validate_note_links(db, current_user.id, payload.book_id, payload.bookmark_id)
+    book_id, source_anchor_id, bookmark, source_anchor = validate_note_links(
+        db,
+        current_user.id,
+        payload.book_id,
+        payload.bookmark_id,
+        payload.source_anchor_id,
+    )
+    page_number = resolve_legacy_page_number(source_anchor, payload.page_number)
+    if source_anchor is None and bookmark is not None and page_number is None:
+        page_number = bookmark.page_number
 
     effective_subscription = get_effective_subscription(db, current_user.id)
     effective_plan = None if effective_subscription is not None else get_effective_plan(db, current_user.id)
@@ -164,17 +193,13 @@ def create_note(
             )
     note = Note(
         notebook_id=notebook.id,
-        book_id=payload.book_id,
+        book_id=book_id,
         bookmark_id=payload.bookmark_id,
-        page_number=payload.page_number,
+        page_number=page_number,
+        source_anchor_id=source_anchor_id,
         title=payload.title,
         body=payload.body,
     )
-    if payload.bookmark_id is not None:
-        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == payload.bookmark_id, Bookmark.user_id == current_user.id))
-        if bookmark:
-            note.book_id = bookmark.book_id
-            note.page_number = note.page_number or bookmark.page_number
     db.add(note)
     db.commit()
     db.refresh(note)
@@ -201,14 +226,38 @@ def update_note(
     data = payload.model_dump(exclude_unset=True)
     next_book_id = data.get("book_id", note.book_id)
     next_bookmark_id = data.get("bookmark_id", note.bookmark_id)
-    validate_note_links(db, current_user.id, next_book_id, next_bookmark_id)
+    if "source_anchor_id" in data:
+        next_anchor_id = data["source_anchor_id"]
+        inherit_bookmark_anchor = False
+    elif "bookmark_id" in data and next_bookmark_id != note.bookmark_id:
+        next_anchor_id = None
+        inherit_bookmark_anchor = True
+    else:
+        next_anchor_id = note.source_anchor_id
+        inherit_bookmark_anchor = False
+
+    resolved_book_id, resolved_anchor_id, bookmark, anchor = validate_note_links(
+        db,
+        current_user.id,
+        next_book_id,
+        next_bookmark_id,
+        next_anchor_id,
+        inherit_bookmark_anchor=inherit_bookmark_anchor,
+    )
+    requested_page = data.get("page_number", note.page_number)
+    if anchor is not None and anchor.id != note.source_anchor_id and anchor.locator_type not in {"pdf_page", "pdf_text"} and "page_number" not in data:
+        requested_page = None
+    resolved_page = resolve_legacy_page_number(anchor, requested_page)
+    if anchor is None and bookmark is not None and "page_number" not in data and "bookmark_id" in data:
+        resolved_page = bookmark.page_number
+
+    note.book_id = resolved_book_id
+    note.bookmark_id = next_bookmark_id
+    note.source_anchor_id = resolved_anchor_id
+    note.page_number = resolved_page
     for field, value in data.items():
-        setattr(note, field, value)
-    if next_bookmark_id is not None:
-        bookmark = db.scalar(select(Bookmark).where(Bookmark.id == next_bookmark_id, Bookmark.user_id == current_user.id))
-        if bookmark:
-            note.book_id = bookmark.book_id
-            note.page_number = note.page_number or bookmark.page_number
+        if field not in {"book_id", "bookmark_id", "source_anchor_id", "page_number"}:
+            setattr(note, field, value)
     db.commit()
     db.refresh(note)
     return NoteRead.model_validate(note)

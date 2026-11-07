@@ -29,6 +29,10 @@ class FakeDB:
     def scalars(self, _query):
         return FakeScalarResult(self.books)
 
+    def execute(self, _query):
+        # The production route now selects each Book with its active paid offer.
+        return FakeScalarResult([(row, None) for row in self.books])
+
 
 def creator(**overrides):
     values = {

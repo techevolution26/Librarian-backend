@@ -9,6 +9,7 @@ from app.models.bookmark import Bookmark
 from app.models.user import User
 from app.schemas.bookmark import BookmarkCreate, BookmarkRead, BookmarkUpdate
 from app.services.bookmark_limits import bookmark_limit_allows_creation, get_bookmark_count
+from app.services.reader_source_anchors import get_owned_source_anchor, resolve_legacy_page_number
 from app.services.subscription_billing import get_effective_plan, get_effective_subscription
 
 router = APIRouter(prefix="/bookmarks", tags=["bookmarks"])
@@ -105,14 +106,19 @@ def create_bookmark(
                 },
             )
 
+    source_anchor = get_owned_source_anchor(
+        db, source_anchor_id=payload.source_anchor_id, user_id=current_user.id, book_id=payload.book_id
+    )
+    page_number = resolve_legacy_page_number(source_anchor, payload.page_number)
     bookmark = Bookmark(
         user_id=current_user.id,
         book_id=payload.book_id,
-        page_number=payload.page_number,
+        page_number=page_number,
         position=payload.position,
         title=payload.title or "Bookmark",
         note=payload.note,
         color=payload.color,
+        source_anchor_id=source_anchor.id if source_anchor else None,
     )
     db.add(bookmark)
     db.commit()
@@ -129,8 +135,20 @@ def update_bookmark(
 ) -> BookmarkRead:
     bookmark = get_owned_bookmark(db, bookmark_id, current_user.id)
 
-    for field, value in payload.model_dump(exclude_unset=True).items():
-        setattr(bookmark, field, value)
+    updates = payload.model_dump(exclude_unset=True)
+    if "source_anchor_id" in updates or "page_number" in updates:
+        anchor_id = updates.get("source_anchor_id", bookmark.source_anchor_id)
+        anchor = get_owned_source_anchor(
+            db, source_anchor_id=anchor_id, user_id=current_user.id, book_id=bookmark.book_id
+        )
+        requested_page = updates.get("page_number", bookmark.page_number)
+        if anchor is not None and anchor.locator_type not in {"pdf_page", "pdf_text"} and "source_anchor_id" in updates:
+            requested_page = updates.get("page_number")
+        bookmark.page_number = resolve_legacy_page_number(anchor, requested_page)
+        bookmark.source_anchor_id = anchor.id if anchor else None
+    for field, value in updates.items():
+        if field not in {"source_anchor_id", "page_number"}:
+            setattr(bookmark, field, value)
 
     db.add(bookmark)
     db.commit()

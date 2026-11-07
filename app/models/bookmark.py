@@ -23,6 +23,9 @@ class Bookmark(Base):
     title: Mapped[str] = mapped_column(String(160), nullable=False, default="Bookmark")
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_anchor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reader_source_anchors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -32,3 +35,4 @@ class Bookmark(Base):
 
     user = relationship("User", back_populates="bookmarks")
     book = relationship("Book", back_populates="bookmarks")
+    source_anchor = relationship("ReaderSourceAnchor")

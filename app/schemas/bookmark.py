@@ -10,6 +10,7 @@ class BookmarkCreate(BaseModel):
     title: str = Field(default="Bookmark", min_length=1, max_length=160)
     note: str | None = Field(default=None, max_length=10000)
     color: str | None = Field(default=None, max_length=32)
+    source_anchor_id: int | None = Field(default=None, gt=0)
 
     @field_validator("title", "position", "note", "color")
     @classmethod
@@ -26,6 +27,7 @@ class BookmarkUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     note: str | None = Field(default=None, max_length=10000)
     color: str | None = Field(default=None, max_length=32)
+    source_anchor_id: int | None = Field(default=None, gt=0)
 
     @field_validator("title", "position", "note", "color")
     @classmethod
@@ -45,6 +47,7 @@ class BookmarkRead(BaseModel):
     title: str
     note: str | None = None
     color: str | None = None
+    source_anchor_id: int | None = None
     created_at: datetime
     updated_at: datetime
 

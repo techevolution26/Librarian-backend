@@ -39,7 +39,7 @@ class ArchivalCanvas(Base):
         ForeignKey("archival_objects.id", ondelete="CASCADE"), nullable=False, index=True
     )
     asset_id: Mapped[int | None] = mapped_column(
-        ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True, index=True
+        ForeignKey("book_assets.id", ondelete="SET NULL"), nullable=True
     )
     canvas_identifier: Mapped[str] = mapped_column(
         String(120), nullable=False, default=lambda: f"tl:canvas:{uuid4().hex}", index=True

@@ -15,7 +15,10 @@ class Highlight(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
     note_id: Mapped[int | None] = mapped_column(ForeignKey("notes.id", ondelete="SET NULL"), nullable=True, index=True)
-    page_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    page_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_anchor_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reader_source_anchors.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     selected_text: Mapped[str] = mapped_column(Text, nullable=False)
     position: Mapped[str | None] = mapped_column(Text, nullable=True)
     color: Mapped[str] = mapped_column(String(24), nullable=False, default="gold")
@@ -25,3 +28,4 @@ class Highlight(Base):
     user = relationship("User")
     book = relationship("Book")
     note = relationship("Note")
+    source_anchor = relationship("ReaderSourceAnchor")

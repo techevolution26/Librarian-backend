@@ -46,3 +46,13 @@ The API now persists in-app notifications and delivers new events over a WebSock
 Admin ingestion is draft-first. A PDF upload creates a catalog record and a versioned `BookAsset`; cover uploads and PDF replacements create additional asset versions without deleting the previous stored object. A separate `PATCH /books/{book_id}/publish` operation moves a valid, active record into the public catalog. Public book/content endpoints only expose published, non-archived records.
 
 The current development storage backend is the mounted local `storage/` volume. The asset model stores stable storage keys, checksums, versions, MIME types, sizes, uploader identity, and current-asset state so the storage implementation can later move to durable object storage without changing the catalog contract.
+
+## Source-native Reader research
+
+Private bookmarks, highlights, Notebook notes, and quote references can attach
+to typed source anchors through `/reader/source-anchors`. Locators preserve the
+difference between PDF pages/text, IIIF canvases, image regions, Book
+transcription spans, verified OCR spans, and media time ranges. Existing
+`page_number` fields remain for compatibility and are populated only for PDF
+anchors. See `docs/ARCHITECTURE.md`, `docs/DOMAINS.md`, and
+`docs/DEVELOPMENT.md` for the source-locator contract.
