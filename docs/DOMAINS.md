@@ -65,4 +65,13 @@ media locators must not be represented as Book pages.
 
 Bookmarks, highlights, private Notebook notes, and quote references may attach
 to an anchor. Existing page-only records remain valid. Circle annotations are
-independent, Circle-scoped community records and do not consume Reader anchors.
+independent, Circle-scoped community records and do not consume Reader anchors. QuoteReference responses format source-aware citations from the anchor type and immutable source snapshot: PDF pages/text ranges, canvas identifiers and labels, image-region coordinates, OCR/plain-text offsets, and media time ranges. Legacy page-only citations remain compatible.
+
+
+Anchor read responses include a computed `source_is_current` hint. Asset-backed
+anchors are compared against the recorded current asset/version/checksum;
+OCR additionally checks that the captured OCR record is still verified and
+bound to the same source asset/checksum. Book text spans compare the current
+transcription hash. The value is `null` when no comparable version/hash exists.
+It is intentionally computed at read time and does not rewrite the source
+snapshot or replace storage fixity verification.

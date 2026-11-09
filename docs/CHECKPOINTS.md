@@ -64,3 +64,33 @@ verified in the project environment. The repository's local `.env` is
 intentionally not included in generated source checkpoints; use `.env.example`
 for local setup. The `storage/` directory and its PDF files were excluded from
 this tackle and checkpoint.
+
+
+## Sprint 7 — T5.7 Expo Reader source-anchor integration (2026-11-06)
+
+Paired the T4 native Reader checkpoint with the T5 backend source-anchor
+checkpoint. The mobile client now creates and retrieves typed source anchors,
+attaches them to Bookmarks, Highlights, Notebook Notes, and QuoteReferences,
+and restores source-native locations from Notebook.
+
+Supported native capture/restore paths: PDF page and text range, plain-text
+range, IIIF canvas, image region, and verified OCR range. Unicode-codepoint
+source offsets are converted at React Native UTF-16 selection boundaries.
+The backend exposes a read-time `source_is_current` resolution hint so stale
+PDF/transcription/OCR/image-region ranges are not silently restored against a
+replacement source. Legacy page-only records remain supported. Compatibility
+fallback is intentionally limited to an absent source-anchor route and PDF
+page workflows; validation/access/not-found/conflict responses are surfaced.
+
+Notebook note cards and formal citation cards now have explicit Open source
+actions. Highlight-to-Notebook development and QuoteReference creation retain
+the source anchor. Circle annotation models/routes are unchanged. Media-time
+locators remain backend-only pending protected media delivery/playback.
+
+Validation: the mobile source tree has 74 TypeScript/TSX files with zero
+transpilation/syntax diagnostics. Full TypeScript semantic checking and
+Android/iOS runtime acceptance remain pending because this checkpoint excludes
+`node_modules` and Expo SDK type declarations. The paired backend full suite
+passes 150 tests under the documented test-only `passlib` import shim; Python
+compilation and migration graph validation are run separately. No `storage/`
+folder, PDF, or private `.env` is packaged.

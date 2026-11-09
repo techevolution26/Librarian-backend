@@ -165,6 +165,9 @@ class ReaderSourceAnchorRead(BaseModel):
     source_asset_version: int | None = None
     source_asset_checksum_sha256: str | None = None
     source_text_sha256: str | None = None
+    # Live resolution hint: the immutable source snapshot is still the current
+    # representation. None means the locator has no versioned asset/text to compare.
+    source_is_current: bool | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

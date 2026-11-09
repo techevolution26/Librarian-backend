@@ -9,7 +9,7 @@ from app.models.archival_canvas import ArchivalCanvas
 from app.models.archival_object import ArchivalObject
 from app.models.book import Book
 from app.models.user import User
-from app.routes import bookmarks, highlights, notebook, quote_references
+from app.routes import bookmarks, highlights, notebook, quote_references, reader_source_anchors
 from app.schemas.bookmark import BookmarkCreate, BookmarkUpdate
 from app.schemas.highlight import HighlightCreate, HighlightUpdate
 from app.schemas.note import NoteCreate, NoteUpdate
@@ -95,6 +95,8 @@ def test_reader_records_can_attach_non_page_anchor_without_fabricating_page_numb
                 }
             )
             anchor = create_reader_source_anchor(db, user=user, book_id=book.id, locator=payload.locator)
+            anchor_read = reader_source_anchors.get_source_anchor(anchor.id, db, user)
+            assert anchor_read.source_is_current is True  # Canvas identity exists even without a versioned access image.
 
             bookmark = bookmarks.create_bookmark(
                 BookmarkCreate(book_id=book.id, source_anchor_id=anchor.id), db, user

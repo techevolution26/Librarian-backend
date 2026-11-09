@@ -33,6 +33,9 @@ Sprint 6 has a coherent access and billing foundation. Do not add another tackle
   snapshots; no storage URLs or Circle data are exposed.
 - 🟢 T5.4 Alembic migration and focused locator/validation tests.
 - 🟡 T5.5 Protected media delivery/playback before media-time anchors become a
-  user-facing Reader workflow.
-- 🟡 T5.6 Native client integration, citation rendering, and migration of
-  client-created research records to source anchors.
+  user-facing Reader workflow; the Expo client does not expose media-time controls.
+- 🟢 T5.6 Expo integration for PDF page/text, Book text span, IIIF canvas,
+  image-region, and verified OCR anchors; Bookmarks, Highlights, Notes, and
+  QuoteReferences preserve `source_anchor_id` and Notebook return-to-source.
+- 🟡 T5.7 Live PostgreSQL/API deployment and native SDK 57 device acceptance;
+  media playback remains a separate future capability.

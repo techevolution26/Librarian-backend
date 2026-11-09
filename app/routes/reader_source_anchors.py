@@ -12,13 +12,13 @@ from app.schemas.reader_source_anchor import (
     ReaderSourceAnchorRead,
     ReaderSourceLocator,
 )
-from app.services.reader_source_anchors import create_reader_source_anchor
+from app.services.reader_source_anchors import create_reader_source_anchor, is_source_anchor_current
 
 router = APIRouter(prefix="/reader/source-anchors", tags=["reader-source-anchors"])
 _locator_adapter = TypeAdapter(ReaderSourceLocator)
 
 
-def _read(row: ReaderSourceAnchor) -> ReaderSourceAnchorRead:
+def _read(db: Session, row: ReaderSourceAnchor) -> ReaderSourceAnchorRead:
     return ReaderSourceAnchorRead(
         id=row.id,
         user_id=row.user_id,
@@ -32,6 +32,7 @@ def _read(row: ReaderSourceAnchor) -> ReaderSourceAnchorRead:
         source_asset_version=row.source_asset_version,
         source_asset_checksum_sha256=row.source_asset_checksum_sha256,
         source_text_sha256=row.source_text_sha256,
+        source_is_current=is_source_anchor_current(db, row),
         created_at=row.created_at,
     )
 
@@ -48,7 +49,7 @@ def create_source_anchor(
         book_id=payload.book_id,
         locator=payload.locator,
     )
-    return _read(row)
+    return _read(db, row)
 
 
 @router.get("", response_model=list[ReaderSourceAnchorRead])
@@ -61,7 +62,7 @@ def list_source_anchors(
     if book_id is not None:
         query = query.where(ReaderSourceAnchor.book_id == book_id)
     rows = db.scalars(query.order_by(ReaderSourceAnchor.created_at.desc(), ReaderSourceAnchor.id.desc())).all()
-    return [_read(row) for row in rows]
+    return [_read(db, row) for row in rows]
 
 
 @router.get("/{anchor_id}", response_model=ReaderSourceAnchorRead)
@@ -78,7 +79,7 @@ def get_source_anchor(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Reader source anchor not found")
-    return _read(row)
+    return _read(db, row)
 
 
 @router.delete("/{anchor_id}", status_code=status.HTTP_204_NO_CONTENT)

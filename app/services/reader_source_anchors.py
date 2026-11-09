@@ -243,3 +243,54 @@ def resolve_legacy_page_number(
     if page_number is not None:
         _invalid("Non-PDF source anchors must not be represented as Book page numbers")
     return None
+
+
+def is_source_anchor_current(db: Session, anchor: ReaderSourceAnchor) -> bool | None:
+    """Resolve whether an immutable anchor still identifies the current source.
+
+    This is a read-time hint, not a mutation or a new access grant. The stored
+    snapshot remains unchanged when an asset/transcription is superseded.
+    """
+    if anchor.source_asset_id is not None:
+        asset = db.get(BookAsset, anchor.source_asset_id)
+        if (
+            asset is None
+            or not asset.is_current
+            or asset.version != anchor.source_asset_version
+            or not anchor.source_asset_checksum_sha256
+            or asset.checksum_sha256.lower() != anchor.source_asset_checksum_sha256.lower()
+        ):
+            return False
+
+        if anchor.canvas_id is not None:
+            canvas = db.get(ArchivalCanvas, anchor.canvas_id)
+            if canvas is None or canvas.asset_id != asset.id:
+                return False
+
+        if anchor.ocr_page_id is not None:
+            ocr_page = db.get(ArchivalOCRPage, anchor.ocr_page_id)
+            if (
+                ocr_page is None
+                or ocr_page.status != "verified"
+                or ocr_page.verified_at is None
+                or ocr_page.source_asset_id != asset.id
+                or ocr_page.source_checksum_sha256.lower() != asset.checksum_sha256.lower()
+            ):
+                return False
+        return True
+
+    if anchor.source_asset_version is not None or anchor.source_asset_checksum_sha256 is not None:
+        # The snapshot says an asset was present, but its FK has since gone.
+        return False
+
+    if anchor.source_text_sha256 is not None:
+        book = db.get(Book, anchor.book_id)
+        if book is None or book.source_type.lower() != "text" or not book.content_text:
+            return False
+        current_checksum = hashlib.sha256(book.content_text.encode("utf-8")).hexdigest()
+        return current_checksum == anchor.source_text_sha256
+
+    if anchor.canvas_id is not None:
+        return db.get(ArchivalCanvas, anchor.canvas_id) is not None
+
+    return None

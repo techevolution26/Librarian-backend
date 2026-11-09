@@ -23,6 +23,7 @@ from app.services import reader_source_anchors as anchor_service
 from app.services.reader_source_anchors import (
     create_reader_source_anchor,
     get_owned_source_anchor,
+    is_source_anchor_current,
     resolve_legacy_page_number,
 )
 
@@ -440,3 +441,82 @@ def test_canvas_locators_reject_blank_identifiers() -> None:
         ReaderSourceAnchorCreate.model_validate(
             {"book_id": 1, "locator": {"type": "iiif_canvas", "canvas_identifier": "   "}}
         )
+
+
+def test_anchor_reports_stale_when_pdf_access_version_is_replaced(db_session: Session) -> None:
+    db = db_session
+    user = seed_user(db)
+    book = seed_book(db)
+    original = seed_asset(db, user, book, asset_type="pdf", mime_type="application/pdf", version=1)
+    anchor = create_reader_source_anchor(
+        db,
+        user=user,
+        book_id=book.id,
+        locator=ReaderSourceAnchorCreate.model_validate({
+            "book_id": book.id,
+            "locator": {"type": "pdf_page", "asset_id": original.id, "page_number": 2},
+        }).locator,
+    )
+    assert is_source_anchor_current(db, anchor) is True
+
+    original.is_current = False
+    db.flush()
+    assert is_source_anchor_current(db, anchor) is False
+
+
+def test_text_anchor_reports_stale_when_transcription_changes(db_session: Session) -> None:
+    db = db_session
+    user = seed_user(db)
+    book = seed_book(db, source_type="text", content_text="Original transcription")
+    anchor = create_reader_source_anchor(
+        db,
+        user=user,
+        book_id=book.id,
+        locator=ReaderSourceAnchorCreate.model_validate({
+            "book_id": book.id,
+            "locator": {"type": "text_span", "start_offset": 0, "end_offset": 8},
+        }).locator,
+    )
+    assert is_source_anchor_current(db, anchor) is True
+    book.content_text = "Revised transcription"
+    db.flush()
+    assert is_source_anchor_current(db, anchor) is False
+
+
+def test_ocr_anchor_reports_stale_when_ocr_becomes_unverified(db_session: Session) -> None:
+    db = db_session
+    user = seed_user(db)
+    book = seed_book(db)
+    obj = seed_archival_object(db, book)
+    checksum = "d" * 64
+    asset = seed_asset(db, user, book, asset_type="image", mime_type="image/jpeg", checksum=checksum)
+    canvas = ArchivalCanvas(
+        archival_object_id=obj.id, asset_id=asset.id, canvas_identifier="tl:canvas:ocr-status",
+        sequence=1, label="Folio", media_type="image/jpeg", width=120, height=180,
+    )
+    db.add(canvas)
+    db.flush()
+    ocr = ArchivalOCRPage(
+        archival_object_id=obj.id, canvas_id=canvas.id, source_asset_id=asset.id,
+        source_checksum_sha256=checksum, text="Verified text", language="eng",
+        engine="tesseract", engine_version="5.4", status="verified",
+        verified_at=datetime.now(timezone.utc),
+    )
+    db.add(ocr)
+    db.flush()
+    anchor = create_reader_source_anchor(
+        db,
+        user=user,
+        book_id=book.id,
+        locator=ReaderSourceAnchorCreate.model_validate({
+            "book_id": book.id,
+            "locator": {
+                "type": "ocr_span", "canvas_identifier": canvas.canvas_identifier,
+                "ocr_page_id": ocr.id, "start_offset": 0, "end_offset": 8,
+            },
+        }).locator,
+    )
+    assert is_source_anchor_current(db, anchor) is True
+    ocr.status = "stale"
+    db.flush()
+    assert is_source_anchor_current(db, anchor) is False

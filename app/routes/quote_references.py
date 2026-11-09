@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.book import Book
+from app.models.archival_canvas import ArchivalCanvas
 from app.models.highlight import Highlight
 from app.models.note import Note
 from app.models.notebook import Notebook
 from app.models.quote_reference import QuoteReference
+from app.models.reader_source_anchor import ReaderSourceAnchor
 from app.models.user import User
 from app.schemas.quote_reference import QuoteReferenceCreate, QuoteReferenceRead, QuoteReferenceUpdate
 from app.services.reader_source_anchors import get_owned_source_anchor, resolve_legacy_page_number
@@ -55,8 +57,91 @@ def validate_highlight(db: Session, highlight_id: int | None, user_id: int, book
     return highlight
 
 
-def to_read(row: QuoteReference, book: Book) -> QuoteReferenceRead:
-    page = f", p. {row.page_number}" if row.page_number is not None else ""
+def _format_media_time(seconds: float) -> str:
+    total = max(0.0, float(seconds))
+    hours = int(total // 3600)
+    minutes = int((total % 3600) // 60)
+    remainder = total % 60
+    if hours:
+        return f"{hours}:{minutes:02d}:{remainder:05.2f}"
+    return f"{minutes}:{remainder:05.2f}"
+
+
+def format_source_anchor_location(
+    anchor: ReaderSourceAnchor,
+    *,
+    canvas_label: str | None = None,
+) -> str | None:
+    """Build a human-readable citation locator without changing the anchor."""
+    locator = anchor.locator_data or {}
+    kind = anchor.locator_type
+    if kind in {"pdf_page", "pdf_text"}:
+        page = locator.get("page_number")
+        if not isinstance(page, int) or page < 1:
+            return None
+        if kind == "pdf_text":
+            start = locator.get("start_offset")
+            end = locator.get("end_offset")
+            if isinstance(start, int) and isinstance(end, int) and end > start:
+                return f"p. {page}, text characters {start + 1}–{end}"
+        return f"p. {page}"
+
+    if kind == "text_span":
+        start = locator.get("start_offset")
+        end = locator.get("end_offset")
+        if isinstance(start, int) and isinstance(end, int) and end > start:
+            return f"text characters {start + 1}–{end}"
+        return "plain-text transcription"
+
+    canvas_identifier = anchor.source_canvas_identifier or locator.get("canvas_identifier")
+    if kind in {"iiif_canvas", "image_region", "ocr_span", "media_time"}:
+        canvas_name = f'Canvas “{canvas_label}”' if canvas_label else "Archival canvas"
+        if canvas_identifier:
+            canvas_name += f" [{canvas_identifier}]"
+        if kind == "iiif_canvas":
+            return canvas_name
+        if kind == "image_region":
+            coordinate_space = locator.get("coordinate_space", "pixel")
+            x, y = locator.get("x"), locator.get("y")
+            width, height = locator.get("width"), locator.get("height")
+            if all(isinstance(value, (int, float)) for value in (x, y, width, height)):
+                unit = "%" if coordinate_space == "percent" else "px"
+                return f"{canvas_name}, region x={x:g}{unit}, y={y:g}{unit}, w={width:g}{unit}, h={height:g}{unit}"
+            return f"{canvas_name}, image region"
+        if kind == "ocr_span":
+            start, end = locator.get("start_offset"), locator.get("end_offset")
+            if isinstance(start, int) and isinstance(end, int) and end > start:
+                return f"{canvas_name}, OCR characters {start + 1}–{end}"
+            return f"{canvas_name}, OCR transcription"
+        start, end = locator.get("start_seconds"), locator.get("end_seconds")
+        if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
+            return f"{canvas_name}, { _format_media_time(start) }–{ _format_media_time(end) }"
+        return canvas_name
+    return None
+
+
+def to_read(
+    row: QuoteReference,
+    book: Book,
+    source_anchor: ReaderSourceAnchor | None = None,
+    canvas_label: str | None = None,
+) -> QuoteReferenceRead:
+    citation = book.title
+    location = format_source_anchor_location(source_anchor, canvas_label=canvas_label) if source_anchor else None
+    if location:
+        citation += f", {location}" if location.startswith("p. ") else f" — {location}"
+    elif row.page_number is not None:
+        citation += f", p. {row.page_number}"
+
+    if source_anchor is not None:
+        identifiers = []
+        if source_anchor.source_accession_number:
+            identifiers.append(f"Accession {source_anchor.source_accession_number}")
+        if source_anchor.source_persistent_identifier:
+            identifiers.append(f"Archival ID {source_anchor.source_persistent_identifier}")
+        if identifiers:
+            citation += f" — {'; '.join(identifiers)}"
+
     return QuoteReferenceRead(
         id=row.id,
         user_id=row.user_id,
@@ -67,12 +152,27 @@ def to_read(row: QuoteReference, book: Book) -> QuoteReferenceRead:
         page_number=row.page_number,
         locator=row.locator,
         quote_text=row.quote_text,
-        citation=f"{book.title}{page} — selected passage",
+        citation=f"{citation} — selected passage",
         source_title=book.title,
         source_author=book.author,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
+
+
+def _citation_context(
+    db: Session,
+    row: QuoteReference,
+    user_id: int,
+) -> tuple[ReaderSourceAnchor | None, str | None]:
+    anchor = get_owned_source_anchor(
+        db,
+        source_anchor_id=row.source_anchor_id,
+        user_id=user_id,
+        book_id=row.book_id,
+    )
+    canvas = db.get(ArchivalCanvas, anchor.canvas_id) if anchor and anchor.canvas_id else None
+    return anchor, canvas.label if canvas else None
 
 
 @router.get("/", response_model=list[QuoteReferenceRead])
@@ -92,7 +192,33 @@ def list_quote_references(
         query = query.where(QuoteReference.highlight_id == highlight_id)
     rows = db.scalars(query.order_by(QuoteReference.updated_at.desc(), QuoteReference.id.desc())).all()
     books = {book.id: book for book in db.scalars(select(Book).where(Book.id.in_({row.book_id for row in rows}))).all()}
-    return [to_read(row, books[row.book_id]) for row in rows if row.book_id in books]
+    anchor_ids = {row.source_anchor_id for row in rows if row.source_anchor_id is not None}
+    anchors = {
+        anchor.id: anchor
+        for anchor in db.scalars(
+            select(ReaderSourceAnchor).where(
+                ReaderSourceAnchor.id.in_(anchor_ids or {-1}),
+                ReaderSourceAnchor.user_id == current_user.id,
+            )
+        ).all()
+    }
+    canvas_ids = {anchor.canvas_id for anchor in anchors.values() if anchor.canvas_id is not None}
+    canvas_labels = {
+        canvas.id: canvas.label
+        for canvas in db.scalars(select(ArchivalCanvas).where(ArchivalCanvas.id.in_(canvas_ids or {-1}))).all()
+    }
+    return [
+        to_read(
+            row,
+            books[row.book_id],
+            anchors.get(row.source_anchor_id),
+            canvas_labels.get(anchors[row.source_anchor_id].canvas_id)
+            if row.source_anchor_id in anchors and anchors[row.source_anchor_id].canvas_id is not None
+            else None,
+        )
+        for row in rows
+        if row.book_id in books
+    ]
 
 
 @router.get("/{reference_id}", response_model=QuoteReferenceRead)
@@ -102,7 +228,8 @@ def get_quote_reference(
     current_user: User = Depends(get_current_user),
 ) -> QuoteReferenceRead:
     row = owned_reference(db, reference_id, current_user.id)
-    return to_read(row, get_book(db, row.book_id))
+    anchor, canvas_label = _citation_context(db, row, current_user.id)
+    return to_read(row, get_book(db, row.book_id), anchor, canvas_label)
 
 
 @router.post("/", response_model=QuoteReferenceRead, status_code=status.HTTP_201_CREATED)
@@ -138,7 +265,8 @@ def create_quote_reference(
     db.add(row)
     db.commit()
     db.refresh(row)
-    return to_read(row, book)
+    anchor, canvas_label = _citation_context(db, row, current_user.id)
+    return to_read(row, book, anchor, canvas_label)
 
 
 @router.patch("/{reference_id}", response_model=QuoteReferenceRead)
@@ -182,7 +310,8 @@ def update_quote_reference(
         row.page_number = data["page_number"]
     db.commit()
     db.refresh(row)
-    return to_read(row, get_book(db, row.book_id))
+    anchor, canvas_label = _citation_context(db, row, current_user.id)
+    return to_read(row, get_book(db, row.book_id), anchor, canvas_label)
 
 
 @router.delete("/{reference_id}", status_code=status.HTTP_204_NO_CONTENT)

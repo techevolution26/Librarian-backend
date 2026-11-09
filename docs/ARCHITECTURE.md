@@ -138,3 +138,13 @@ for archival sources, a published ArchivalObject with viewing rights. Anchors
 are immutable through the API; clients create a new anchor when the source
 location or source version changes. The server never stores a duplicate copy
 of the selected document/transcription inside an anchor.
+
+The read API computes `source_is_current` at request time. It compares asset
+identity, current-version state, version, and recorded checksum; OCR anchors
+also require the same verified OCR record and source asset/checksum, while
+plain-text anchors compare the exact current transcription hash. `false`
+means a saved range must not be silently applied to a replacement source;
+`true` means the current source identity can be resolved; `null` means the
+available locator has no versioned source evidence to compare. This is a
+resolution hint only: it does not mutate the immutable anchor, verify storage
+fixity, or grant access to the source.
