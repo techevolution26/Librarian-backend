@@ -70,6 +70,8 @@ __all__ = [
     "Institution",
     "InstitutionMembership",
     "InstitutionSubscription",
+    "ResourceContribution",
+    "ResourceContributionAsset",
 ]
 
 from app.models.preservation_event import PreservationEvent
@@ -103,3 +105,5 @@ from app.models.subscription import Subscription
 from app.models.billing_webhook_event import BillingWebhookEvent
 from app.models.purchase import Purchase
 from app.models.institution import Institution, InstitutionMembership, InstitutionSubscription
+
+from app.models.resource_contribution import ResourceContribution, ResourceContributionAsset

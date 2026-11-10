@@ -60,3 +60,16 @@ Sprint 6 has a coherent access and billing foundation. Do not add another tackle
 - ✅ Existing ArchivalObject PATCH API supports the dedicated descriptive metadata/provenance editor; rights decisions stay on the auditable rights-review endpoint.
 - 🟡 Collection hierarchy and controlled creator authority are not represented in the current schema. A single `collection_id` assignment must not be presented as a nested archival hierarchy.
 - 🟡 Replication currently implements the configured local provider; object-storage provider replication needs a provider-specific copy implementation.
+
+
+## Community resource contributions — 2026-11-10
+
+- ✅ Standard authenticated members can upload private PDF, UTF-8 text, and image-only facsimile submissions with ordered supplementary canvases.
+- ✅ Quarantine package records are separate from Books/ArchivalObjects; owner/Admin authorization protects metadata and source-asset access.
+- ✅ Admin queue/review endpoints support submitted, under-review, changes-requested, rejected, approved and withdrawn status views.
+- ✅ Admin approval promotes verified source files into a draft Book and ArchivalObject, preserves contributor uploader attribution, checksums, storage-location records, canvases and preservation events.
+- ✅ Imported archival rights remain unverified and public IIIF remains closed until independent Admin rights review and explicit Book publication.
+- ✅ Approval rollback no longer deletes successfully promoted files after a successful database commit; quarantine cleanup is best-effort after commit.
+- 🟡 A retention/erasure policy and scheduled cleanup for private quarantine assets is still needed. Until then, operators must monitor quarantine volume; rejected/withdrawn assets remain private rather than being silently purged.
+- 🟡 Source-file replacement during contributor correction and hierarchical Collection/creator-authority resolution remain future capabilities.
+- 🟢 Validation: **167 backend tests passed**, Python compilation passed, Alembic single head `f6d7e8a9b0c1`.

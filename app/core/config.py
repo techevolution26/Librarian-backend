@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     max_archival_canvas_count: int = 200
     max_archival_ingest_total_mb: int = 512
     max_cover_upload_mb: int = 10
+    max_pending_resource_contributions_per_user: int = 5
     max_avatar_upload_mb: int = 5
 
     stripe_secret_key: str | None = None

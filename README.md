@@ -60,3 +60,8 @@ anchors. See `docs/ARCHITECTURE.md`, `docs/DOMAINS.md`, and
 ## Source-anchor validation
 
 See [`docs/READER-HTTP-ACCEPTANCE.md`](docs/READER-HTTP-ACCEPTANCE.md) for the FastAPI HTTP regression flow and production PostgreSQL acceptance boundary.
+
+
+## Community resource contributions
+
+The `/community/resource-contributions` API accepts private source submissions from authenticated standard members. Admin review and approval imports accepted submissions into draft Books/ArchivalObjects; rights verification and publication remain separate operations. See [docs/COMMUNITY-CONTRIBUTIONS.md](./docs/COMMUNITY-CONTRIBUTIONS.md).

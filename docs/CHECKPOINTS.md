@@ -112,3 +112,12 @@ Backend Admin ingestion now supports PDF, UTF-8 text, and image-only facsimile p
 ## 2026-11-10 — Admin preservation dashboard contract
 
 Added `GET /preservation-events/admin/{object_id}/dashboard`, an Admin-only aggregate for all logical asset versions, safe storage-copy status fields, and append-only preservation events. Physical storage keys and public URLs are excluded from this dashboard response. Added regression coverage for the endpoint and for descriptive metadata/provenance updates through the existing ArchivalObject PATCH contract. Complete backend test suite: 161 passed. No migration required.
+
+
+## 2026-11-10 — Community contribution intake and curator review
+
+Added `ResourceContribution` and `ResourceContributionAsset` as private pre-catalogue submission records. New authenticated community routes accept PDF, UTF-8 text, and image-only facsimile packages, expose owner-only contribution/asset reads, let members correct declared metadata and resubmit after a changes request, and let members withdraw eligible pending submissions. Admins get status-filtered queue, review, reject/request-changes, and approve-to-draft operations.
+
+Approval rechecks file SHA-256 and existence, promotes files into canonical archive storage, creates Book/ArchivalObject/BookAsset/AssetStorageLocation/ArchivalCanvas records and ingestion/checksum preservation events, and preserves contributor attribution. Rights are intentionally imported as unverified; publication remains blocked until a separate Admin rights decision and explicit publish action. Attachment previews are inline only behind owner/Admin authorization. Post-commit quarantine cleanup is best-effort and cannot delete a promoted copy after a successful commit.
+
+Validation: **167 backend tests passed**, Python compilation passed, and Alembic reports a single head at `f6d7e8a9b0c1`. Backend tests used a temporary test-only `passlib` import shim, not shipped with the application. The complete `storage/` tree and all PDFs are excluded from distribution archives.

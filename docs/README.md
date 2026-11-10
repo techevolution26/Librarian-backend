@@ -9,7 +9,8 @@ This folder is the authoritative documentation set for the Expo/React Native app
 3. [ROADMAP.md](./ROADMAP.md) — current sprint state and the next-work decision process.
 4. [DOMAINS.md](./DOMAINS.md) — reader, archive, creator, community, and billing boundaries.
 5. [ADMIN-INGESTION.md](./ADMIN-INGESTION.md) — supported upload formats, versioned assets, rights safeguards, and Admin lifecycle.
-6. [CHECKPOINTS.md](./CHECKPOINTS.md) — condensed implementation history and important migrations/checkpoints.
+6. [COMMUNITY-CONTRIBUTIONS.md](./COMMUNITY-CONTRIBUTIONS.md) — member intake, private quarantine, and Admin review/promotion contract.
+7. [CHECKPOINTS.md](./CHECKPOINTS.md) — condensed implementation history and important migrations/checkpoints.
 
 The documentation intentionally does **not** keep one markdown file per tackle. Individual tackle notes became repetitive and quickly became stale. The checkpoint history below records the durable facts; the architecture and development documents describe the current system.
 
