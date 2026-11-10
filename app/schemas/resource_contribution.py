@@ -58,6 +58,8 @@ class ResourceContributionRead(BaseModel):
     reviewed_at: datetime | None
     submitted_at: datetime
     imported_book_id: int | None
+    imported_book_visibility: str | None = None
+    imported_book_archived: bool = False
     created_at: datetime
     updated_at: datetime
     assets: list[ResourceContributionAssetRead] = Field(default_factory=list)
@@ -68,6 +70,9 @@ class ResourceContributionRead(BaseModel):
 class ResourceContributionListRead(BaseModel):
     items: list[ResourceContributionRead]
     total: int
+    active_count: int = 0
+    max_active: int = 5
+    can_submit: bool = True
 
 
 class ResourceContributionReviewUpdate(BaseModel):

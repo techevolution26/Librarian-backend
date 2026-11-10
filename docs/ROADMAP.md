@@ -73,3 +73,12 @@ Sprint 6 has a coherent access and billing foundation. Do not add another tackle
 - 🟡 A retention/erasure policy and scheduled cleanup for private quarantine assets is still needed. Until then, operators must monitor quarantine volume; rejected/withdrawn assets remain private rather than being silently purged.
 - 🟡 Source-file replacement during contributor correction and hierarchical Collection/creator-authority resolution remain future capabilities.
 - 🟢 Validation: **167 backend tests passed**, Python compilation passed, Alembic single head `f6d7e8a9b0c1`.
+
+
+## Community operations and private asset schema alignment — 2026-11-10
+
+- 🟢 Persisted Admin/contributor notifications cover submit, resubmit, withdraw, review, approval-to-draft, publication, archive and restore. WebSocket fan-out is deferred until after transaction commit; rollback clears queued payloads.
+- 🟢 Duplicate `under_review` transitions return 409; contributor metadata edits and withdrawal remain blocked during review. Active contribution capacity is returned by `/mine`.
+- 🟢 Alembic revision `f7a8b9c0d1e2` makes `book_assets.public_url` nullable to align deployed PostgreSQL with the ORM's existing private-asset contract. Current single migration head: `f7a8b9c0d1e2`.
+- 🟡 Execute and verify the new migration in the production PostgreSQL environment after taking a database backup.
+- 🟡 Validate multi-worker realtime delivery; persisted notification rows and client polling remain available if in-process WebSocket fan-out is not shared.

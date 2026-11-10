@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timezone
 from collections import defaultdict
 from typing import Any
 
 from fastapi import WebSocket
+from sqlalchemy import event
+from sqlalchemy.orm import Session
 
 
 class NotificationConnectionManager:
@@ -49,9 +50,23 @@ notification_manager = NotificationConnectionManager()
 
 from app.models.notification import Notification
 
+_PENDING_NOTIFICATION_PAYLOADS = "librarian_pending_notification_payloads"
+
+
+@event.listens_for(Session, "after_commit")
+def _publish_committed_notifications(session: Session) -> None:
+    pending = session.info.pop(_PENDING_NOTIFICATION_PAYLOADS, [])
+    for user_id, payload in pending:
+        notification_manager.publish(user_id, payload)
+
+
+@event.listens_for(Session, "after_rollback")
+def _discard_rolled_back_notifications(session: Session) -> None:
+    session.info.pop(_PENDING_NOTIFICATION_PAYLOADS, None)
+
 
 def create_notification(
-    db,
+    db: Session,
     *,
     user_id: int,
     type: str,
@@ -65,23 +80,20 @@ def create_notification(
         title=title,
         body=body,
         data_json=data,
-        created_at=datetime.now(timezone.utc),
     )
     db.add(row)
     db.flush()
-    notification_manager.publish(
-        user_id,
-        {
-            "event": "notification.created",
-            "notification": {
-                "id": row.id,
-                "type": row.type,
-                "title": row.title,
-                "body": row.body,
-                "data": row.data_json,
-                "read_at": row.read_at.isoformat() if row.read_at else None,
-                "created_at": row.created_at.isoformat() if row.created_at else None,
-            },
+    payload = {
+        "event": "notification.created",
+        "notification": {
+            "id": row.id,
+            "type": row.type,
+            "title": row.title,
+            "body": row.body,
+            "data": row.data_json,
+            "read_at": row.read_at.isoformat() if row.read_at else None,
+            "created_at": row.created_at.isoformat() if row.created_at else None,
         },
-    )
+    }
+    db.info.setdefault(_PENDING_NOTIFICATION_PAYLOADS, []).append((user_id, payload))
     return row

@@ -121,3 +121,12 @@ Added `ResourceContribution` and `ResourceContributionAsset` as private pre-cata
 Approval rechecks file SHA-256 and existence, promotes files into canonical archive storage, creates Book/ArchivalObject/BookAsset/AssetStorageLocation/ArchivalCanvas records and ingestion/checksum preservation events, and preserves contributor attribution. Rights are intentionally imported as unverified; publication remains blocked until a separate Admin rights decision and explicit publish action. Attachment previews are inline only behind owner/Admin authorization. Post-commit quarantine cleanup is best-effort and cannot delete a promoted copy after a successful commit.
 
 Validation: **167 backend tests passed**, Python compilation passed, and Alembic reports a single head at `f6d7e8a9b0c1`. Backend tests used a temporary test-only `passlib` import shim, not shipped with the application. The complete `storage/` tree and all PDFs are excluded from distribution archives.
+
+
+## 2026-11-10 — Community notifications and nullable private asset URLs
+
+Added migration `f7a8b9c0d1e2_make_book_asset_public_url_nullable.py` because the existing ORM correctly allowed `BookAsset.public_url = NULL` for private storage-backed assets while the original PostgreSQL migration had made the column `NOT NULL`. The additive migration aligns the deployed schema without manufacturing public URLs; downgrade fails safely if private assets remain.
+
+Community submission, resubmission and withdrawal now notify active Admin accounts. Admin under-review, changes-requested, rejection and approval-to-draft decisions notify the contributor. Final publication, archive and restore of a community-imported Book notify its original contributor. Notification records commit in the same transaction as the action; WebSocket fan-out occurs only after commit and is discarded on rollback. Repeating the under-review transition returns 409.
+
+Validation: **170 backend tests passed**, Python compilation passed, and Alembic reports one head at `f7a8b9c0d1e2`. Test execution used a temporary test-only `passlib` import shim because that package was unavailable in the working environment; the shim is not included in the repository. Production PostgreSQL migration execution remains a deployment step.

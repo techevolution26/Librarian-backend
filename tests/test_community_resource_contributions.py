@@ -20,6 +20,8 @@ from app.models.archival_object import ArchivalObject
 from app.models.book import Book
 from app.models.book_asset import BookAsset
 from app.models.resource_contribution import ResourceContribution, ResourceContributionAsset
+from app.models.notification import Notification
+from app.services.notifications import create_notification, notification_manager
 from app.models.user import User
 from app.routes import books as books_route
 from app.routes import resource_contributions as contributions_route
@@ -123,6 +125,10 @@ def test_any_authenticated_member_can_submit_private_multi_material_contribution
         assert body["status"] == "submitted"
         assert body["contributor_user_id"] == ids["user"]
         assert body["material_type"] == "pdf"
+        mine = client.get("/community/resource-contributions/mine")
+        assert mine.status_code == 200
+        assert mine.json()["active_count"] == 1
+        assert mine.json()["can_submit"] is True
         assert [item["asset_role"] for item in body["assets"]] == ["primary", "canvas", "canvas"]
         assert all("storage_key" not in item for item in body["assets"])
 
@@ -133,6 +139,9 @@ def test_any_authenticated_member_can_submit_private_multi_material_contribution
             assert db.scalar(select(Book.id).where(Book.title == "Community Manuscript")) is None
             assert db.scalar(select(ArchivalObject.id)) is None
             assert all((storage_root / asset.storage_key).is_file() for asset in contribution.assets)
+            admin_notifications = db.scalars(select(Notification).where(Notification.user_id == ids["admin"])).all()
+            assert any(item.type == "community.contribution.submitted" for item in admin_notifications)
+            assert all(item.data_json["resource_contribution_id"] == body["id"] for item in admin_notifications)
 
         # The user cannot access another member's submission or the Admin queue.
         active_user["id"] = ids["other"]
@@ -162,6 +171,8 @@ def test_review_changes_and_resubmit_lifecycle(monkeypatch, tmp_path):
             audit = db.scalar(select(AdminActivityLog).where(AdminActivityLog.entity_type == "resource_contribution", AdminActivityLog.entity_id == created["id"]))
             assert audit is not None
             assert audit.action == "community.resource_contribution_changes_requested"
+            contributor_notifications = db.scalars(select(Notification).where(Notification.user_id == ids["user"])).all()
+            assert any(item.type == "community.contribution.changes_requested" for item in contributor_notifications)
 
         active_user["id"] = ids["user"]
         updated = client.patch(
@@ -180,6 +191,9 @@ def test_review_changes_and_resubmit_lifecycle(monkeypatch, tmp_path):
         resubmitted = client.post(f"/community/resource-contributions/{created['id']}/resubmit")
         assert resubmitted.status_code == 200, resubmitted.text
         assert resubmitted.json()["status"] == "submitted"
+        with factory() as db:
+            admin_notifications = db.scalars(select(Notification).where(Notification.user_id == ids["admin"])).all()
+            assert any(item.type == "community.contribution.resubmitted" for item in admin_notifications)
     finally:
         client.close()
         app.dependency_overrides.clear()
@@ -205,6 +219,9 @@ def test_admin_approval_imports_draft_and_keeps_rights_unreviewed_until_publish_
             archival_object = db.get(ArchivalObject, object_id)
             assert contribution is not None and contribution.status == "approved"
             assert contribution.imported_book_id == book_id
+            notifications = db.scalars(select(Notification).where(Notification.user_id == ids["user"])).all()
+            approved_notifications = [item for item in notifications if item.type == "community.contribution.approved"]
+            assert approved_notifications and approved_notifications[-1].data_json["book_id"] == book_id
             assert book is not None and book.visibility == "draft" and book.source_type == "pdf"
             assert archival_object is not None and archival_object.visibility == "draft"
             assert archival_object.rights is not None
@@ -228,6 +245,30 @@ def test_admin_approval_imports_draft_and_keeps_rights_unreviewed_until_publish_
         published = client.patch(f"/books/{book_id}/publish")
         assert published.status_code == 200, published.text
         assert published.json()["visibility"] == "published"
+        contributor_view = client.get(f"/community/resource-contributions/{created['id']}")
+        assert contributor_view.status_code == 200
+        assert contributor_view.json()["imported_book_visibility"] == "published"
+        assert contributor_view.json()["imported_book_archived"] is False
+        with factory() as db:
+            contributor_notifications = db.scalars(select(Notification).where(Notification.user_id == ids["user"])).all()
+            publication_notifications = [item for item in contributor_notifications if item.type == "community.contribution.published"]
+            assert publication_notifications
+            assert publication_notifications[-1].data_json["book_id"] == book_id
+
+        archived = client.patch(f"/books/{book_id}/archive")
+        assert archived.status_code == 200, archived.text
+        contributor_view = client.get(f"/community/resource-contributions/{created['id']}")
+        assert contributor_view.status_code == 200
+        assert contributor_view.json()["imported_book_archived"] is True
+        restored = client.patch(f"/books/{book_id}/restore")
+        assert restored.status_code == 200, restored.text
+        contributor_view = client.get(f"/community/resource-contributions/{created['id']}")
+        assert contributor_view.status_code == 200
+        assert contributor_view.json()["imported_book_archived"] is False
+        with factory() as db:
+            contributor_notifications = db.scalars(select(Notification).where(Notification.user_id == ids["user"])).all()
+            assert any(item.type == "community.contribution.archived" for item in contributor_notifications)
+            assert any(item.type == "community.contribution.restored" for item in contributor_notifications)
 
         # Re-approval cannot duplicate the catalogue record.
         duplicate = client.post(f"/community/resource-contributions/admin/{created['id']}/approve")
@@ -329,3 +370,66 @@ def test_image_only_facsimile_submission_imports_ordered_canvas_assets(monkeypat
         client.close()
         app.dependency_overrides.clear()
         engine.dispose()
+
+
+def test_notification_realtime_delivery_waits_for_commit(monkeypatch, tmp_path):
+    client, factory, engine, active_user, ids, _ = _client(monkeypatch, tmp_path)
+    published = []
+    monkeypatch.setattr(notification_manager, "publish", lambda user_id, payload: published.append((user_id, payload)))
+    try:
+        with factory() as db:
+            create_notification(
+                db, user_id=ids["user"], type="community.contribution.test",
+                title="Test", body="Must not be delivered before commit.",
+            )
+            assert published == []
+            db.rollback()
+        with factory() as db:
+            create_notification(
+                db, user_id=ids["user"], type="community.contribution.test",
+                title="Test", body="Delivered after commit.",
+            )
+            assert published == []
+            db.commit()
+            assert len(published) == 1
+            assert published[0][0] == ids["user"]
+            assert published[0][1]["notification"]["title"] == "Test"
+    finally:
+        client.close()
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+
+def test_under_review_contribution_is_locked_for_contributor(monkeypatch, tmp_path):
+    client, factory, engine, active_user, ids, _ = _client(monkeypatch, tmp_path)
+    try:
+        created = _submit_pdf(client, "Locked while reviewed").json()
+        active_user["id"] = ids["admin"]
+        reviewed = client.post(
+            f"/community/resource-contributions/admin/{created['id']}/review",
+            json={"status": "under_review", "review_note": "Review started."},
+        )
+        assert reviewed.status_code == 200
+        duplicate_review = client.post(
+            f"/community/resource-contributions/admin/{created['id']}/review",
+            json={"status": "under_review", "review_note": "Duplicate review should not notify twice."},
+        )
+        assert duplicate_review.status_code == 409
+        active_user["id"] = ids["user"]
+        update = client.patch(f"/community/resource-contributions/{created['id']}", json={"description": "Attempted edit"})
+        withdraw = client.post(f"/community/resource-contributions/{created['id']}/withdraw")
+        assert update.status_code == 409
+        assert withdraw.status_code == 409
+        with factory() as db:
+            assert db.scalar(select(ResourceContribution.status).where(ResourceContribution.id == created["id"])) == "under_review"
+            notifications = db.scalars(select(Notification).where(Notification.user_id == ids["user"])).all()
+            assert any(item.type == "community.contribution.under_review" for item in notifications)
+    finally:
+        client.close()
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+
+def test_book_asset_public_url_is_nullable_for_private_storage_assets():
+    assert BookAsset.__table__.c.public_url.nullable is True
+

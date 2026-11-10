@@ -22,10 +22,12 @@ from app.models.archival_rights import ArchivalRights
 from app.models.preservation_event import PreservationEvent
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets, AssetStorageLocationRead
 from app.models.user import User
+from app.models.resource_contribution import ResourceContribution
 from app.core.authz import require_admin_user
 from app.core.security import get_current_user, get_optional_current_user
 
 from app.services.admin_activity import log_admin_activity
+from app.services.notifications import create_notification
 from app.services.entitlements import resolve_book_access
 from app.models.admin_activity_log import AdminActivityLog
 from app.services.iiif_image import IIIFImageInfo, inspect_image
@@ -39,6 +41,25 @@ from app.services.uploads import (
 from app.core.config import get_settings
 
 router = APIRouter(prefix="/books", tags=["books"])
+
+
+def _notify_community_contributor_for_book(
+    db: Session, *, book_id: int, type: str, title: str, body: str
+) -> None:
+    contribution = db.scalar(
+        select(ResourceContribution).where(ResourceContribution.imported_book_id == book_id)
+    )
+    if contribution is None:
+        return
+    create_notification(
+        db,
+        user_id=contribution.contributor_user_id,
+        type=type,
+        title=title,
+        body=body,
+        data={"resource_contribution_id": contribution.id, "book_id": book_id},
+    )
+
 
 ensure_storage_dirs()
 
@@ -2264,6 +2285,16 @@ def publish_book(
             raise HTTPException(status_code=409, detail="Complete the archival rights review before publishing this record")
         book.archival_object.visibility = "published" if rights.view_allowed is True else "restricted"
     book.visibility = "published"
+    source_is_viewable = bool(book.archival_object is None or (book.archival_object.rights and book.archival_object.rights.view_allowed is True))
+    contributor_message = (
+        "Your contributed resource has passed archival review and is now published for public viewing."
+        if source_is_viewable
+        else "Your contributed resource has been published in the catalogue. Its digital source remains restricted under the archive's rights decision."
+    )
+    _notify_community_contributor_for_book(
+        db, book_id=book.id, type="community.contribution.published",
+        title="Your contributed resource is published", body=contributor_message,
+    )
     log_admin_activity(db, current_user, action="book.published", entity_type="book", entity_id=book.id, metadata={"title": book.title, "archival_object_visibility": book.archival_object.visibility if book.archival_object else None})
     db.commit()
     db.refresh(book)
@@ -2284,6 +2315,11 @@ def archive_book(
         raise HTTPException(status_code=404, detail="Book not found")
 
     book.archived_at = datetime.now(timezone.utc)
+    _notify_community_contributor_for_book(
+        db, book_id=book.id, type="community.contribution.archived",
+        title="Your contributed resource was archived",
+        body="An administrator archived the catalogue record. It is no longer listed as an active public resource.",
+    )
 
     log_admin_activity(
         db,
@@ -2315,6 +2351,11 @@ def restore_book(
         raise HTTPException(status_code=404, detail="Book not found")
 
     book.archived_at = None
+    _notify_community_contributor_for_book(
+        db, book_id=book.id, type="community.contribution.restored",
+        title="Your contributed resource was restored",
+        body="An administrator restored the catalogue record. Its visibility continues to follow the current archival rights decision.",
+    )
 
     log_admin_activity(
         db,

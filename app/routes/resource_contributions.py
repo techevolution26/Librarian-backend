@@ -39,6 +39,7 @@ from app.schemas.resource_contribution import (
     ResourceContributionReviewUpdate,
 )
 from app.services.admin_activity import log_admin_activity
+from app.services.notifications import create_notification
 from app.services.iiif_image import inspect_image
 from app.services.storage import get_storage_backend
 from app.services.uploads import (
@@ -52,6 +53,26 @@ from app.services.uploads import (
 router = APIRouter(prefix="/community/resource-contributions", tags=["community-resource-contributions"])
 
 ARCHIVAL_OBJECT_TYPES = {"book", "manuscript", "newspaper", "photograph", "map", "document", "oral_history", "other"}
+
+
+def _notify_active_admins(db: Session, *, type: str, title: str, body: str, contribution_id: int) -> None:
+    admin_ids = db.scalars(
+        select(User.id).where(func.upper(User.role) == "ADMIN", User.is_active.is_(True))
+    ).all()
+    for admin_id in admin_ids:
+        create_notification(
+            db, user_id=admin_id, type=type, title=title, body=body,
+            data={"resource_contribution_id": contribution_id},
+        )
+
+
+def _notify_contributor(
+    db: Session, row: ResourceContribution, *, type: str, title: str, body: str, extra_data: dict | None = None
+) -> None:
+    data = {"resource_contribution_id": row.id}
+    if extra_data:
+        data.update(extra_data)
+    create_notification(db, user_id=row.contributor_user_id, type=type, title=title, body=body, data=data)
 
 
 def _safe_filename(value: str | None) -> str:
@@ -71,6 +92,7 @@ def _contribution_query():
     return select(ResourceContribution).options(
         selectinload(ResourceContribution.assets),
         selectinload(ResourceContribution.contributor),
+        selectinload(ResourceContribution.imported_book),
     )
 
 
@@ -124,6 +146,8 @@ def _read(row: ResourceContribution) -> ResourceContributionRead:
         "reviewed_at": row.reviewed_at,
         "submitted_at": row.submitted_at,
         "imported_book_id": row.imported_book_id,
+        "imported_book_visibility": row.imported_book.visibility if row.imported_book else None,
+        "imported_book_archived": bool(row.imported_book and row.imported_book.archived_at is not None),
         "created_at": row.created_at,
         "updated_at": row.updated_at,
         "assets": row.assets,
@@ -302,6 +326,10 @@ async def submit_resource_contribution(
                 width=width,
                 height=height,
             ))
+        _notify_active_admins(
+            db, type="community.contribution.submitted", title="New community contribution",
+            body=f'{row.title} was submitted for archival review.', contribution_id=row.id,
+        )
         db.commit()
         row = db.scalar(_contribution_query().where(ResourceContribution.id == row.id))
         return _read(row)
@@ -325,7 +353,15 @@ def list_my_resource_contributions(
 ) -> ResourceContributionListRead:
     stmt = _contribution_query().where(ResourceContribution.contributor_user_id == current_user.id)
     rows = db.scalars(stmt.order_by(ResourceContribution.submitted_at.desc())).all()
-    return ResourceContributionListRead(items=[_read(row) for row in rows], total=len(rows))
+    active_count = int(db.scalar(select(func.count()).select_from(ResourceContribution).where(
+        ResourceContribution.contributor_user_id == current_user.id,
+        ResourceContribution.status.in_(["submitted", "under_review", "changes_requested"]),
+    )) or 0)
+    max_active = get_settings().max_pending_resource_contributions_per_user
+    return ResourceContributionListRead(
+        items=[_read(row) for row in rows], total=len(rows), active_count=active_count,
+        max_active=max_active, can_submit=active_count < max_active,
+    )
 
 
 @router.get("/admin/queue", response_model=ResourceContributionListRead)
@@ -426,6 +462,10 @@ def resubmit_resource_contribution(
     row.status = "submitted"
     row.submitted_at = datetime.now(timezone.utc)
     row.review_note = None
+    _notify_active_admins(
+        db, type="community.contribution.resubmitted", title="Contribution resubmitted",
+        body=f'{row.title} has been corrected and returned to the review queue.', contribution_id=row.id,
+    )
     db.commit()
     db.refresh(row)
     return _read(row)
@@ -439,6 +479,10 @@ def withdraw_resource_contribution(
     if row.status not in {"submitted", "changes_requested"}:
         raise HTTPException(status_code=409, detail="This contribution can no longer be withdrawn")
     row.status = "withdrawn"
+    _notify_active_admins(
+        db, type="community.contribution.withdrawn", title="Contribution withdrawn",
+        body=f'{row.title} was withdrawn by its contributor.', contribution_id=row.id,
+    )
     db.commit()
     db.refresh(row)
     return _read(row)
@@ -455,6 +499,8 @@ def review_resource_contribution(
         raise HTTPException(status_code=404, detail="Resource contribution not found")
     if row.status not in {"submitted", "under_review", "changes_requested"}:
         raise HTTPException(status_code=409, detail="Contribution is not in a reviewable state")
+    if row.status == "under_review" and payload.status == "under_review":
+        raise HTTPException(status_code=409, detail="This contribution is already marked under review")
     row.status = payload.status
     row.review_note = payload.review_note.strip() if payload.review_note else None
     row.reviewed_by_user_id = current_user.id
@@ -463,6 +509,18 @@ def review_resource_contribution(
         db, current_user, action=f"community.resource_contribution_{payload.status}",
         entity_type="resource_contribution", entity_id=row.id,
         metadata={"status": payload.status, "contributor_user_id": row.contributor_user_id},
+    )
+    status_messages = {
+        "under_review": ("Contribution is under review", "The archive team has started reviewing your contribution."),
+        "changes_requested": ("Changes requested", "The archive team needs clarification or corrections before continuing."),
+        "rejected": ("Contribution not accepted", "The archive team has closed this submission. Review the note for details."),
+    }
+    title, body = status_messages[payload.status]
+    if row.review_note:
+        body = f"{body} Note: {row.review_note}"
+    _notify_contributor(
+        db, row, type=f"community.contribution.{payload.status}", title=title, body=body,
+        extra_data={"status": payload.status},
     )
     db.commit()
     db.refresh(row)
@@ -684,6 +742,11 @@ def approve_resource_contribution(
         log_admin_activity(
             db, current_user, action="community.resource_contribution_approved", entity_type="resource_contribution",
             entity_id=row.id, metadata={"book_id": book.id, "archival_object_id": archival_object.id, "material_type": row.material_type},
+        )
+        _notify_contributor(
+            db, row, type="community.contribution.approved", title="Resource accepted into the draft archive",
+            body="Your contribution was imported into a draft catalogue record. It is not public yet; the archive must complete an independent rights review and publish it.",
+            extra_data={"status": "approved", "book_id": book.id},
         )
         db.commit()
         committed = True

@@ -41,3 +41,18 @@ See the route inventory and permissions in this document's mobile counterpart. R
 2. Add source-file replacement for `changes_requested` if reviewer workflows require it; the first mobile correction screen updates metadata only.
 3. Add hierarchical Collection and controlled creator-authority models separately; current contribution collection/creator values are descriptive strings, not authoritative linked records.
 4. Complete PostgreSQL migration deployment and test multi-part uploads using actual local and cloud-backed mobile document providers.
+
+
+## Notifications and state transitions
+
+Contribution lifecycle notifications are persisted in the same SQLAlchemy transaction as the state change. `app/services/notifications.py` queues WebSocket payloads in `Session.info`; `after_commit` publishes them, and `after_rollback` discards them. This prevents realtime clients from being told about a change that did not commit. The app's persistent notifications REST endpoints and polling fallback remain the source of truth.
+
+- Submission, resubmission, and withdrawal notify active Admin users.
+- Admin review states (`under_review`, `changes_requested`, `rejected`) and approval-to-draft notify the contributor.
+- A repeated transition from `under_review` to `under_review` returns 409 rather than generating duplicate notices. Contributor edit and withdraw remain 409 while under review.
+- Publishing, archiving, and restoring an imported Book notify its originating contributor. A publication notification distinguishes catalogue publication from the case where the digital source remains restricted by the recorded rights decision.
+- `/mine` returns `active_count`, `max_active`, and `can_submit` so the client can avoid offering a submission action when the configured cap is reached. The endpoint remains server-authoritative.
+
+## Private BookAsset public URL migration
+
+Revision `f7a8b9c0d1e2` makes `book_assets.public_url` nullable, matching the current ORM model and private storage architecture. A private asset is addressed by a protected application route and storage key; it must not be assigned a fabricated public URL. The migration is additive and follows `f6d7e8a9b0c1`. Its downgrade intentionally refuses to restore `NOT NULL` while any BookAsset has a NULL `public_url`, rather than inventing URLs or modifying private assets.
