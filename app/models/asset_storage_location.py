@@ -25,7 +25,6 @@ class AssetStorageLocation(Base):
     __tablename__ = "asset_storage_locations"
     __table_args__ = (
         UniqueConstraint("asset_id", "provider", "bucket", "storage_key", name="uq_asset_storage_location"),
-        Index("ix_asset_storage_locations_asset_id", "asset_id"),
         Index("ix_asset_storage_locations_provider", "provider"),
         Index("ix_asset_storage_locations_status", "status"),
     )

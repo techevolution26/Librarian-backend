@@ -39,6 +39,29 @@ def _public_canvas(canvas_id: int, db: Session) -> tuple[ArchivalObject, Archiva
     )
     if not canvas or not canvas.asset:
         raise HTTPException(status_code=404, detail="Archival canvas not found")
+    rights = canvas.archival_object.rights
+    if not rights or rights.view_allowed is not True or rights.verified_at is None:
+        raise HTTPException(status_code=403, detail="Archival rights review does not permit public OCR access")
+    return canvas.archival_object, canvas, canvas.asset
+
+
+def _admin_canvas(canvas_id: int, db: Session) -> tuple[ArchivalObject, ArchivalCanvas, BookAsset]:
+    """Resolve an access image for curator workflows, including draft objects."""
+    canvas = db.scalar(
+        select(ArchivalCanvas)
+        .join(ArchivalObject, ArchivalCanvas.archival_object_id == ArchivalObject.id)
+        .join(BookAsset, ArchivalCanvas.asset_id == BookAsset.id)
+        .options(selectinload(ArchivalCanvas.archival_object), selectinload(ArchivalCanvas.asset))
+        .where(
+            ArchivalCanvas.id == canvas_id,
+            ArchivalObject.archived_at.is_(None),
+            BookAsset.asset_role == "access",
+            BookAsset.is_current.is_(True),
+            BookAsset.mime_type.like("image/%"),
+        )
+    )
+    if not canvas or not canvas.asset:
+        raise HTTPException(status_code=404, detail="Archival canvas not found")
     return canvas.archival_object, canvas, canvas.asset
 
 
@@ -50,6 +73,25 @@ def _verify_source(asset: BookAsset, object_id: int) -> tuple[bool, str | None, 
         return verify_asset_fixity(asset.storage_key, expected)
     except (FileNotFoundError, ValueError) as exc:
         return False, None, str(exc)
+
+
+@router.get("/admin/{object_id}/canvases/{canvas_id}/ocr", response_model=list[ArchivalOCRRead])
+def admin_list_canvas_ocr(
+    object_id: int,
+    canvas_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> list[ArchivalOCRRead]:
+    require_admin_user(current_user)
+    obj, canvas, _ = _admin_canvas(canvas_id, db)
+    if obj.id != object_id:
+        raise HTTPException(status_code=404, detail="Archival canvas not found")
+    rows = db.scalars(
+        select(ArchivalOCRPage)
+        .where(ArchivalOCRPage.canvas_id == canvas.id)
+        .order_by(ArchivalOCRPage.created_at.desc())
+    ).all()
+    return [ArchivalOCRRead.model_validate(row) for row in rows]
 
 
 @router.get("/{object_id}/canvases/{canvas_identifier}/ocr", response_model=list[ArchivalOCRRead])
@@ -64,8 +106,6 @@ def list_canvas_ocr(
     obj, canvas, _ = _public_canvas(canvas.id, db)
     if obj.id != object_id:
         raise HTTPException(status_code=404, detail="Archival canvas not found")
-    if obj.rights and obj.rights.view_allowed is False:
-        raise HTTPException(status_code=403, detail="OCR for this archival object is not publicly viewable")
     rows = db.scalars(
         select(ArchivalOCRPage)
         .where(ArchivalOCRPage.canvas_id == canvas.id, ArchivalOCRPage.status == "verified")
@@ -84,7 +124,7 @@ def generate_canvas_ocr(
 ) -> ArchivalOCRRead:
     require_admin_user(current_user)
 
-    obj, canvas, asset = _public_canvas(canvas_id, db)
+    obj, canvas, asset = _admin_canvas(canvas_id, db)
     if obj.id != object_id:
         raise HTTPException(status_code=404, detail="Archival canvas not found")
 
@@ -172,7 +212,7 @@ def verify_canvas_ocr(
     current_user: User = Depends(get_current_user),
 ) -> ArchivalOCRRead:
     require_admin_user(current_user)
-    obj, canvas, asset = _public_canvas(canvas_id, db)
+    obj, canvas, asset = _admin_canvas(canvas_id, db)
     if obj.id != object_id:
         raise HTTPException(status_code=404, detail="Archival canvas not found")
 

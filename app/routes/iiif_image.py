@@ -55,6 +55,9 @@ def _public_canvas(identifier: str, db: Session) -> tuple[ArchivalObject, Archiv
     )
     if not location:
         raise HTTPException(status_code=404, detail="IIIF image storage location not found")
+    rights = canvas.archival_object.rights
+    if not rights or rights.view_allowed is not True or rights.verified_at is None:
+        raise HTTPException(status_code=403, detail="A verified archival rights decision is required for public IIIF access")
     return canvas.archival_object, canvas, canvas.asset, location
 
 
@@ -77,8 +80,6 @@ def _resolve_image_path(location: AssetStorageLocation) -> Path:
 @router.get("/{identifier}/info.json", response_model=IIIFImageInfo)
 def get_image_info(identifier: str, request: Request, db: Session = Depends(get_db)) -> JSONResponse:
     obj, _, _, location = _public_canvas(identifier, db)
-    if obj.rights and obj.rights.view_allowed is False:
-        raise HTTPException(status_code=403, detail="Viewing this archival image is not permitted")
     try:
         path = _resolve_image_path(location)
         info = inspect_image(path)
@@ -114,8 +115,6 @@ def get_image(
     db: Session = Depends(get_db),
 ) -> Response:
     obj, _, _, location = _public_canvas(identifier, db)
-    if obj.rights and obj.rights.view_allowed is False:
-        raise HTTPException(status_code=403, detail="Viewing this archival image is not permitted")
     try:
         image_request = parse_request(region, size, rotation, quality, format)
         path = _resolve_image_path(location)

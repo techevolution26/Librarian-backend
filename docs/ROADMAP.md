@@ -39,3 +39,24 @@ Sprint 6 has a coherent access and billing foundation. Do not add another tackle
   QuoteReferences preserve `source_anchor_id` and Notebook return-to-source.
 - 🟡 T5.7 Live PostgreSQL/API deployment and native SDK 57 device acceptance;
   media playback remains a separate future capability.
+
+
+## Admin archival ingestion — multi-material support
+
+- 🟢 `POST /books/ingest` supports PDF, strict UTF-8 text, and image-only facsimile primary representations.
+- 🟢 PDF/text may include supplementary ordered JPEG/PNG/WebP IIIF canvases.
+- 🟢 Existing Books can gain canvases; each canvas has a stable logical asset key and independent version history.
+- 🟢 Canvas replacement preserves the canvas identifier, enforces aggregate limits, and records preservation events.
+- 🟢 Adding/replacing/deleting source canvases invalidates the previous rights decision and withdraws public IIIF delivery until re-review.
+- 🟢 Rights `allow` requires an evidence/source reference; public IIIF manifest, image, and OCR delivery fail closed without a verified allow decision.
+- 🟢 Admin OCR generate/recheck works on draft materials through authenticated curator routes.
+- 🟡 Audio/video/office formats remain unsupported as primary Reader materials pending protected delivery and native playback/presentation.
+- 🟡 PostgreSQL migration `f5c8d1a2b3c4` and production deployment validation are required before running this code against the production database.
+
+
+## Admin metadata and preservation workspace — 2026-11-10
+
+- ✅ Admin-only preservation dashboard aggregates logical assets, physical storage-copy states and append-only events without exposing storage keys or public URLs.
+- ✅ Existing ArchivalObject PATCH API supports the dedicated descriptive metadata/provenance editor; rights decisions stay on the auditable rights-review endpoint.
+- 🟡 Collection hierarchy and controlled creator authority are not represented in the current schema. A single `collection_id` assignment must not be presented as a nested archival hierarchy.
+- 🟡 Replication currently implements the configured local provider; object-storage provider replication needs a provider-specific copy implementation.

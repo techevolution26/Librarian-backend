@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.authz import require_admin_user
 from app.core.database import get_db
@@ -13,6 +13,7 @@ from app.models.book_asset import BookAsset
 from app.models.preservation_event import PreservationEvent
 from app.models.user import User
 from app.schemas.preservation_event import PreservationEventCreate, PreservationEventRead
+from app.schemas.preservation_dashboard import PreservationDashboardRead, PreservationAssetRead, PreservationDashboardEventRead
 
 router = APIRouter(prefix="/preservation-events", tags=["preservation"])
 
@@ -38,6 +39,37 @@ def list_preservation_events(
         .order_by(PreservationEvent.event_date.desc(), PreservationEvent.id.desc())
     ).all()
     return [_read(row) for row in rows]
+
+
+@router.get("/admin/{object_id}/dashboard", response_model=PreservationDashboardRead)
+def get_preservation_dashboard(
+    object_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> PreservationDashboardRead:
+    """Return an Admin-only preservation overview without exposing storage keys or public URLs."""
+    require_admin_user(current_user)
+    archival_object = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
+    if archival_object is None:
+        raise HTTPException(status_code=404, detail="Archival object not found")
+
+    assets = db.scalars(
+        select(BookAsset)
+        .join(Book, Book.id == BookAsset.book_id)
+        .where(Book.archival_object_id == object_id)
+        .options(selectinload(BookAsset.storage_locations))
+        .order_by(BookAsset.asset_type.asc(), BookAsset.logical_key.asc(), BookAsset.version.desc())
+    ).all()
+    events = db.scalars(
+        select(PreservationEvent)
+        .where(PreservationEvent.archival_object_id == object_id)
+        .order_by(PreservationEvent.event_date.desc(), PreservationEvent.id.desc())
+    ).all()
+    return PreservationDashboardRead(
+        archival_object_id=object_id,
+        assets=[PreservationAssetRead.model_validate(asset) for asset in assets],
+        events=[PreservationDashboardEventRead.model_validate(event) for event in events],
+    )
 
 
 @router.post("/admin/{object_id}", response_model=PreservationEventRead, status_code=201)

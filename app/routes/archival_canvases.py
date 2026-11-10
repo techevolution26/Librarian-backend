@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.authz import require_archival_curator, require_admin_user
@@ -9,6 +9,8 @@ from app.models.archival_canvas import ArchivalCanvas
 from app.models.archival_object import ArchivalObject
 from app.models.book import Book
 from app.models.book_asset import BookAsset
+from app.models.archival_rights import ArchivalRights
+from app.models.preservation_event import PreservationEvent
 from app.models.user import User
 from app.schemas.archival_canvas import ArchivalCanvasCreate, ArchivalCanvasRead, ArchivalCanvasUpdate
 
@@ -23,6 +25,18 @@ def _get_object(object_id: int, db: Session, *, public: bool = False) -> Archiva
     if not row:
         raise HTTPException(status_code=404, detail="Archival object not found")
     return row
+
+
+def _invalidate_review(object_row: ArchivalObject) -> None:
+    """A changed canvas source set requires a fresh explicit rights decision."""
+    if object_row.rights is None:
+        object_row.rights = ArchivalRights()
+    object_row.rights.view_allowed = None
+    object_row.rights.verified_at = None
+    object_row.rights.verified_by = None
+    object_row.visibility = "draft"
+    if object_row.book is not None:
+        object_row.book.visibility = "draft"
 
 
 def _validate_asset(object_row: ArchivalObject, asset_id: int | None, db: Session) -> BookAsset | None:
@@ -79,6 +93,7 @@ def create_canvas(
 
     row = ArchivalCanvas(archival_object_id=object_id, **payload.model_dump())
     db.add(row)
+    _invalidate_review(object_row)
     db.commit()
     db.refresh(row)
     return ArchivalCanvasRead.model_validate(row)
@@ -106,8 +121,11 @@ def update_canvas(
         ArchivalCanvas.id != canvas_id,
     )):
         raise HTTPException(status_code=409, detail="Canvas sequence already exists")
+    source_changed = updates.get("asset_id", row.asset_id) != row.asset_id
     for field, value in updates.items():
         setattr(row, field, value)
+    if source_changed:
+        _invalidate_review(object_row)
     db.commit()
     db.refresh(row)
     return ArchivalCanvasRead.model_validate(row)
@@ -125,5 +143,25 @@ def delete_canvas(
     row = db.scalar(select(ArchivalCanvas).where(ArchivalCanvas.id == canvas_id, ArchivalCanvas.archival_object_id == object_id))
     if not row:
         raise HTTPException(status_code=404, detail="Canvas not found")
+    asset = db.get(BookAsset, row.asset_id) if row.asset_id else None
+    if asset and asset.asset_type == "image" and asset.asset_role == "access" and asset.is_current:
+        remaining_canvas_references = int(db.scalar(select(func.count(ArchivalCanvas.id)).where(
+            ArchivalCanvas.asset_id == asset.id,
+            ArchivalCanvas.id != row.id,
+        )) or 0)
+        if remaining_canvas_references == 0:
+            asset.is_current = False
+            db.add(PreservationEvent(
+                archival_object_id=object_row.id,
+                asset_id=asset.id,
+                event_type="access_withdrawn",
+                outcome="success",
+                agent=current_user.full_name or f"user:{current_user.id}",
+                detail=f"Canvas {row.canvas_identifier} was removed from the current IIIF sequence; the asset version is retained for preservation history.",
+                source_storage_key=asset.storage_key,
+                checksum=asset.checksum_sha256,
+                checksum_algorithm="SHA-256",
+            ))
     db.delete(row)
+    _invalidate_review(object_row)
     db.commit()

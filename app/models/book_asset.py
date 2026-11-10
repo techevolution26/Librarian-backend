@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Index, UniqueConstraint, text
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Index, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -14,23 +14,46 @@ ASSET_ROLES = {"preservation_master", "access"}
 class BookAsset(Base):
     __tablename__ = "book_assets"
     __table_args__ = (
-        UniqueConstraint("book_id", "asset_type", "asset_role", "version", name="uq_book_asset_version"),
         CheckConstraint("asset_role IN ('preservation_master', 'access')", name="ck_book_asset_role"),
+        # A logical key distinguishes independently versioned components of a
+        # multi-canvas object. Single-file types (PDF/text/cover) keep NULL.
         Index(
-            "uq_book_asset_current",
-            "book_id",
-            "asset_type",
-            "asset_role",
+            "uq_book_asset_version_singleton",
+            "book_id", "asset_type", "asset_role", "version",
             unique=True,
-            postgresql_where=text("is_current = true"),
+            postgresql_where=text("logical_key IS NULL"),
+            sqlite_where=text("logical_key IS NULL"),
+        ),
+        Index(
+            "uq_book_asset_version_logical",
+            "book_id", "asset_type", "asset_role", "logical_key", "version",
+            unique=True,
+            postgresql_where=text("logical_key IS NOT NULL"),
+            sqlite_where=text("logical_key IS NOT NULL"),
+        ),
+        Index(
+            "uq_book_asset_current_singleton",
+            "book_id", "asset_type", "asset_role",
+            unique=True,
+            postgresql_where=text("is_current = true AND logical_key IS NULL"),
+            sqlite_where=text("is_current = 1 AND logical_key IS NULL"),
+        ),
+        Index(
+            "uq_book_asset_current_logical",
+            "book_id", "asset_type", "asset_role", "logical_key",
+            unique=True,
+            postgresql_where=text("is_current = true AND logical_key IS NOT NULL"),
+            sqlite_where=text("is_current = 1 AND logical_key IS NOT NULL"),
         ),
         Index("ix_book_assets_source_asset_id", "source_asset_id"),
+        Index("ix_book_assets_logical_key", "logical_key"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True, index=True)
     book_id: Mapped[int] = mapped_column(ForeignKey("books.id", ondelete="CASCADE"), nullable=False, index=True)
     asset_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     asset_role: Mapped[str] = mapped_column(String(30), nullable=False, default="access", index=True)
+    logical_key: Mapped[str | None] = mapped_column(String(120), nullable=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     original_filename: Mapped[str] = mapped_column(String(255), nullable=False)
     storage_key: Mapped[str] = mapped_column(String(500), nullable=False)

@@ -27,6 +27,7 @@ PRESERVATION_EVENT_TYPES = {
     "preservation_master_created",
     "ocr_created",
     "ocr_verified",
+    "access_withdrawn",
 }
 
 PRESERVATION_EVENT_OUTCOMES = {

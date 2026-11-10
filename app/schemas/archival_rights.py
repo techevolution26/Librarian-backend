@@ -40,3 +40,28 @@ class ArchivalRightsRead(ArchivalRightsBase):
 
 class ArchivalRightsUpdate(ArchivalRightsBase):
     pass
+
+
+class ArchivalRightsReviewRequest(BaseModel):
+    """Explicit online-viewing decision recorded by an authorized curator."""
+
+    decision: str
+    rights_statement: str | None = None
+    rights_holder: str | None = Field(default=None, max_length=255)
+    rights_source: str | None = Field(default=None, max_length=500)
+    license: str | None = Field(default=None, max_length=255)
+    access_conditions: str | None = None
+    reproduction_conditions: str | None = None
+    attribution: str | None = None
+    notes: str | None = None
+    download_allowed: bool = False
+    redistribution_allowed: bool = False
+    commercial_use_allowed: bool = False
+
+    @field_validator("decision")
+    @classmethod
+    def validate_decision(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized not in {"pending", "allow", "deny"}:
+            raise ValueError("decision must be pending, allow, or deny")
+        return normalized

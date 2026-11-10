@@ -69,13 +69,15 @@ def validate_upload_file(
 def canonical_content_type(label: str, suffix: str) -> str:
     if label == "PDF":
         return "application/pdf"
-    if label in {"Cover", "Avatar"}:
+    if label in {"Cover", "Avatar", "Archival image"}:
         return {
             ".png": "image/png",
             ".jpg": "image/jpeg",
             ".jpeg": "image/jpeg",
             ".webp": "image/webp",
         }.get(suffix, "application/octet-stream")
+    if label == "Plain text":
+        return "text/plain; charset=utf-8"
     return "application/octet-stream"
 
 async def save_upload_file(
@@ -92,6 +94,8 @@ async def save_upload_file(
         "PDF": {".pdf"},
         "Cover": {".png", ".jpg", ".jpeg", ".webp"},
         "Avatar": {".png", ".jpg", ".jpeg", ".webp"},
+        "Archival image": {".png", ".jpg", ".jpeg", ".webp"},
+        "Plain text": {".txt", ".md"},
     }.get(label, {Path(fallback_filename).suffix.lower()})
 
     if suffix not in allowed_suffixes:
@@ -109,7 +113,7 @@ async def save_upload_file(
     if label == "PDF" and not signature.startswith(b"%PDF-"):
         raise HTTPException(status_code=400, detail="PDF content signature is invalid")
 
-    if label in {"Cover", "Avatar"}:
+    if label in {"Cover", "Avatar", "Archival image"}:
         valid_image = (
             signature.startswith(b"\x89PNG\r\n\x1a\n")
             or signature.startswith(b"\xff\xd8\xff")

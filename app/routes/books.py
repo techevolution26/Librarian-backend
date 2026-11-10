@@ -5,7 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, Query, status
-from sqlalchemy import select, case, func ,or_
+from sqlalchemy import select, case, func, or_
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from app.models.library_item import LibraryItem
@@ -14,6 +14,11 @@ from app.core.storage import BOOKS_STORAGE_DIR, COVERS_STORAGE_DIR, build_public
 from app.models.book import Book, RIGHTS_STATEMENTS, ORIGINAL_FORMATS
 from app.models.book_asset import BookAsset
 from app.models.asset_storage_location import AssetStorageLocation
+from app.models.archival_object import ArchivalObject
+from app.models.archival_canvas import ArchivalCanvas
+from app.models.archival_metadata import ArchivalMetadata
+from app.models.archival_provenance import ArchivalProvenance
+from app.models.archival_rights import ArchivalRights
 from app.models.preservation_event import PreservationEvent
 from app.schemas.book import BookContentRead, BookRead, AdminBookListRead, BookFacets, AssetStorageLocationRead
 from app.models.user import User
@@ -23,6 +28,7 @@ from app.core.security import get_current_user, get_optional_current_user
 from app.services.admin_activity import log_admin_activity
 from app.services.entitlements import resolve_book_access
 from app.models.admin_activity_log import AdminActivityLog
+from app.services.iiif_image import IIIFImageInfo, inspect_image
 from app.services.uploads import (
     validate_upload_file,
     save_upload_file,
@@ -77,6 +83,139 @@ def to_resource_read(row: Book, *, include_assets: bool = False) -> BookRead:
 
 to_book_read = to_resource_read
 
+
+def _archival_view_allowed(book: Book) -> bool:
+    """Legacy books without an archival authority record keep their old access path.
+
+    Once a Book is linked to an ArchivalObject, the explicit archival rights
+    decision becomes authoritative for delivery of the underlying digital
+    material. Missing or unverified decisions fail closed.
+    """
+    archival_object = book.archival_object
+    if archival_object is None:
+        return True
+    rights = archival_object.rights
+    return bool(rights and rights.view_allowed is True and rights.verified_at is not None)
+
+
+def _safe_archive_identifier(accession_no: str) -> str:
+    return f"AO-{accession_no}"
+
+
+def _image_mime_type(image_info: IIIFImageInfo) -> str:
+    """Return the decoded image format, never infer media type from filename suffix."""
+    formats = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp"}
+    mime_type = formats.get(getattr(image_info, "format", None))
+    if mime_type is None:
+        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP image content is supported")
+    return mime_type
+
+
+def _withdraw_current_access_asset(
+    db: Session,
+    *,
+    asset: BookAsset,
+    archival_object: ArchivalObject | None,
+    current_user: User,
+    detail: str,
+) -> None:
+    """Retain an old asset version, mark it non-current, and record its withdrawal."""
+    if not asset.is_current:
+        return
+    asset.is_current = False
+    if archival_object is None:
+        return
+    db.add(PreservationEvent(
+        archival_object_id=archival_object.id,
+        asset_id=asset.id,
+        event_type="access_withdrawn",
+        outcome="success",
+        agent=current_user.full_name or f"user:{current_user.id}",
+        detail=detail,
+        source_storage_key=asset.storage_key,
+        checksum=asset.checksum_sha256,
+        checksum_algorithm="SHA-256",
+    ))
+
+
+def _asset_version(db: Session, *, book_id: int, asset_type: str, logical_key: str | None) -> int:
+    query = select(func.max(BookAsset.version)).where(
+        BookAsset.book_id == book_id,
+        BookAsset.asset_type == asset_type,
+        BookAsset.asset_role == "access",
+    )
+    if logical_key is None:
+        query = query.where(BookAsset.logical_key.is_(None))
+    else:
+        query = query.where(BookAsset.logical_key == logical_key)
+    return int(db.scalar(query) or 0) + 1
+
+
+def _add_asset_storage_location(db: Session, asset: BookAsset) -> None:
+    db.add(AssetStorageLocation(
+        asset_id=asset.id,
+        provider="local",
+        storage_key=asset.storage_key,
+        public_url=asset.public_url,
+        status="active",
+        is_primary=True,
+        checksum_sha256=asset.checksum_sha256,
+        size_bytes=asset.size_bytes,
+    ))
+
+
+def _invalidate_archival_rights_review(archival_object: ArchivalObject, book: Book) -> None:
+    """Withdraw public access after the source set changes until rights are reviewed again."""
+    if archival_object.rights is None:
+        archival_object.rights = ArchivalRights()
+    archival_object.rights.view_allowed = None
+    archival_object.rights.verified_at = None
+    archival_object.rights.verified_by = None
+    archival_object.rights.download_allowed = False
+    archival_object.rights.redistribution_allowed = False
+    archival_object.rights.commercial_use_allowed = False
+    archival_object.visibility = "draft"
+    book.visibility = "draft"
+
+
+def _ensure_archival_object_for_book(book: Book, current_user: User) -> ArchivalObject:
+    archival_object = book.archival_object
+    if archival_object is not None:
+        return archival_object
+
+    accession_no = book.accession_no or generate_accession_no()
+    book.accession_no = accession_no
+    archival_object = ArchivalObject(
+        identifier=_safe_archive_identifier(accession_no),
+        object_type="document",
+        title=book.title,
+        description=book.description,
+        curator_user_id=current_user.id,
+        visibility="draft",
+    )
+    archival_object.intellectual_metadata = ArchivalMetadata(
+        language=book.language,
+        subjects=book.subjects,
+        genre=book.genres,
+        contributors=[item.strip() for item in book.author.split(",") if item.strip()],
+    )
+    archival_object.provenance = ArchivalProvenance(
+        original_format=book.original_format,
+        physical_condition=book.condition_notes,
+        origin_place=book.origin,
+        digitized_by=book.digitized_by,
+        digitized_at=book.digitized_at,
+    )
+    archival_object.rights = ArchivalRights(
+        rights_statement=book.rights_statement,
+        view_allowed=None,
+        download_allowed=False,
+        redistribution_allowed=False,
+        commercial_use_allowed=False,
+    )
+    book.archival_object = archival_object
+    return archival_object
+
 def public_books_stmt():
     return (
         select(Book)
@@ -105,6 +244,8 @@ def serve_book_file(
     book = db.scalar(select(Book).where(Book.source_path == str(candidate)))
     if book is None:
         raise HTTPException(status_code=404, detail="Book file not found")
+    if not _archival_view_allowed(book):
+        raise HTTPException(status_code=403, detail="Archival rights review does not permit digital viewing")
 
     if current_user is None:
         allowed, reason, _ = resolve_book_access(db, user_id=0, book_id=book.id)
@@ -1007,6 +1148,8 @@ def get_book_content(
     )
     if not row:
         raise HTTPException(status_code=404, detail="Book not found")
+    if not _archival_view_allowed(row):
+        raise HTTPException(status_code=403, detail={"code": "archival_rights_review_required", "message": "The digital material is unavailable until its archival viewing rights have been reviewed and approved."})
 
     if current_user is None:
         allowed, reason, _ = resolve_book_access(db, user_id=0, book_id=book_id)
@@ -1027,6 +1170,597 @@ def get_book_content(
     )
 
 
+
+
+@router.post("/ingest", response_model=BookRead, status_code=201)
+async def ingest_archival_material(
+    request: Request,
+    material_type: str = Form(...),
+    title: str = Form(...),
+    author: str = Form(...),
+    description: str = Form(...),
+    rating: float = Form(0),
+    pages: int = Form(0),
+    genre_csv: str = Form(""),
+    subjects_csv: str = Form(""),
+    language: str = Form("en"),
+    origin: str | None = Form(None),
+    era: str | None = Form(None),
+    original_format: str = Form("born-digital"),
+    condition_notes: str | None = Form(None),
+    curator_note: str | None = Form(None),
+    digitized_by: str | None = Form(None),
+    rights_statement: str = Form("all-rights-reserved"),
+    rights_decision: str = Form("pending"),
+    rights_holder: str | None = Form(None),
+    rights_source: str | None = Form(None),
+    rights_notes: str | None = Form(None),
+    archival_object_type: str = Form("document"),
+    source_institution: str | None = Form(None),
+    source_collection: str | None = Form(None),
+    shelfmark: str | None = Form(None),
+    provenance_accession_number: str | None = Form(None),
+    digitization_method: str | None = Form(None),
+    scanner_device: str | None = Form(None),
+    preservation_master_format: str | None = Form(None),
+    derivative_format: str | None = Form(None),
+    software: str | None = Form(None),
+    pdf_file: UploadFile | None = File(None),
+    text_file: UploadFile | None = File(None),
+    canvas_files: list[UploadFile] | None = File(None),
+    cover_file: UploadFile | None = File(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    """Create a draft catalogue record and linked archival object from supported source material.
+
+    The main representation is exactly one of PDF, UTF-8 plain text, or an
+    image-only IIIF facsimile. Any of these can include supplementary image
+    canvases. All files and metadata are committed together or rolled back.
+    """
+    require_admin_user(current_user)
+    material_type = material_type.strip().lower()
+    archival_object_type = archival_object_type.strip().lower()
+    rights_decision = rights_decision.strip().lower()
+    if material_type not in {"pdf", "text", "facsimile"}:
+        raise HTTPException(status_code=400, detail="material_type must be pdf, text, or facsimile")
+    if archival_object_type not in {"book", "manuscript", "newspaper", "photograph", "map", "document", "oral_history", "other"}:
+        raise HTTPException(status_code=400, detail="Unsupported archival object type")
+    if rights_decision not in {"pending", "allow", "deny"}:
+        raise HTTPException(status_code=400, detail="rights_decision must be pending, allow, or deny")
+    if rights_decision == "allow" and not (rights_source and rights_source.strip()):
+        raise HTTPException(status_code=400, detail="An evidence source is required before approving online viewing")
+    if original_format not in ORIGINAL_FORMATS:
+        raise HTTPException(status_code=400, detail="Invalid original_format")
+    if rights_statement not in RIGHTS_STATEMENTS:
+        raise HTTPException(status_code=400, detail="Invalid rights_statement")
+    if not title.strip() or not author.strip() or not description.strip():
+        raise HTTPException(status_code=400, detail="Title, author, and description are required")
+
+    canvas_files = [item for item in (canvas_files or []) if item and item.filename]
+    settings = get_settings()
+    if len(canvas_files) > settings.max_archival_canvas_count:
+        raise HTTPException(status_code=413, detail=f"At most {settings.max_archival_canvas_count} archival images may be ingested at once")
+
+    if material_type == "pdf" and (pdf_file is None or text_file is not None):
+        raise HTTPException(status_code=400, detail="Select exactly one PDF as the primary material")
+    if material_type == "text" and (text_file is None or pdf_file is not None):
+        raise HTTPException(status_code=400, detail="Select exactly one UTF-8 text file as the primary material")
+    if material_type == "facsimile" and (pdf_file is not None or text_file is not None or not canvas_files):
+        raise HTTPException(status_code=400, detail="An image-only facsimile requires one or more archival images and no PDF/text primary file")
+    if material_type != "facsimile" and not (pdf_file or text_file):
+        raise HTTPException(status_code=400, detail="A primary source file is required")
+    if not (pdf_file or text_file or canvas_files):
+        raise HTTPException(status_code=400, detail="At least one supported digital source is required")
+
+    saved_paths: list[Path] = []
+    try:
+        primary_filename: str | None = None
+        primary_destination: Path | None = None
+        primary_mime: str | None = None
+        primary_checksum: str | None = None
+        primary_text: str | None = None
+
+        if pdf_file is not None:
+            validate_upload_file(pdf_file, {"application/pdf"}, settings.max_pdf_upload_mb, "PDF")
+            primary_filename, primary_destination = await save_upload_file(
+                pdf_file, BOOKS_STORAGE_DIR, "source.pdf", settings.max_pdf_upload_mb, "PDF"
+            )
+            saved_paths.append(primary_destination)
+            primary_mime = "application/pdf"
+            primary_checksum = compute_sha256(primary_destination)
+
+        if text_file is not None:
+            validate_upload_file(text_file, {"text/plain", "text/markdown"}, settings.max_text_upload_mb, "Plain text")
+            primary_filename, primary_destination = await save_upload_file(
+                text_file, BOOKS_STORAGE_DIR, "source.txt", settings.max_text_upload_mb, "Plain text"
+            )
+            saved_paths.append(primary_destination)
+            try:
+                primary_text = primary_destination.read_text(encoding="utf-8")
+            except UnicodeDecodeError as exc:
+                raise HTTPException(status_code=400, detail="Text source must be valid UTF-8. No lossy conversion was applied.") from exc
+            if not primary_text.strip() or "\x00" in primary_text:
+                raise HTTPException(status_code=400, detail="Text source is empty or contains binary data")
+            primary_mime = "text/plain; charset=utf-8"
+            primary_checksum = compute_sha256(primary_destination)
+
+        cover_filename: str | None = None
+        cover_destination: Path | None = None
+        cover_url: str | None = None
+        if cover_file is not None and cover_file.filename:
+            validate_upload_file(cover_file, {"image/jpeg", "image/png", "image/webp"}, settings.max_cover_upload_mb, "Cover")
+            cover_filename, cover_destination = await save_upload_file(
+                cover_file, COVERS_STORAGE_DIR, "cover.jpg", settings.max_cover_upload_mb, "Cover"
+            )
+            saved_paths.append(cover_destination)
+            try:
+                inspect_image(cover_destination)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail="Cover file is not a valid supported image") from exc
+            cover_url = build_public_static_url(f"/static/covers/{cover_filename}", request)
+
+        prepared_canvases: list[tuple[str, str, Path, str, str, int, int, str]] = []
+        for index, image_file in enumerate(canvas_files, start=1):
+            validate_upload_file(
+                image_file,
+                {"image/jpeg", "image/png", "image/webp"},
+                settings.max_archival_image_upload_mb,
+                "Archival image",
+            )
+            image_name, image_destination = await save_upload_file(
+                image_file,
+                BOOKS_STORAGE_DIR / "canvases",
+                "canvas.jpg",
+                settings.max_archival_image_upload_mb,
+                "Archival image",
+            )
+            saved_paths.append(image_destination)
+            try:
+                image_info = inspect_image(image_destination)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=f"Image '{image_file.filename}' is not a valid supported image") from exc
+            if image_info.width * image_info.height > 100_000_000:
+                raise HTTPException(status_code=413, detail=f"Image '{image_file.filename}' exceeds the 100-megapixel safety limit")
+            mime_type = _image_mime_type(image_info)
+            label = Path(image_file.filename or image_name).stem.strip() or f"Canvas {index}"
+            canvas_identifier = f"tl:canvas:{uuid4().hex}"
+            prepared_canvases.append((image_file.filename or image_name, image_name, image_destination, mime_type, label[:255], image_info.width, image_info.height, canvas_identifier))
+
+        aggregate_limit = settings.max_archival_ingest_total_mb * 1024 * 1024
+        aggregate_size = sum(path.stat().st_size for path in saved_paths)
+        if aggregate_size > aggregate_limit:
+            raise HTTPException(status_code=413, detail=f"Combined archival ingest exceeds {settings.max_archival_ingest_total_mb}MB")
+
+        accession_no = generate_accession_no()
+        cover_value = cover_url or build_public_static_url("/static/assets/book-placeholder.svg", request)
+        source_path = str(primary_destination) if primary_destination else None
+        source_url = (
+            build_public_static_url(f"/books/file/{primary_filename}", request)
+            if material_type == "pdf" and primary_filename
+            else None
+        )
+        book = Book(
+            title=title.strip(),
+            author=author.strip(),
+            cover=cover_value,
+            description=description.strip(),
+            rating=max(0, min(float(rating), 5)),
+            pages=max(0, int(pages)),
+            source_type={"pdf": "pdf", "text": "text", "facsimile": "iiif"}[material_type],
+            source_url=source_url,
+            source_path=source_path,
+            mime_type=primary_mime,
+            content_text=primary_text,
+            visibility="draft",
+            accession_no=accession_no,
+            language=language.strip() or "en",
+            origin=origin.strip() if origin and origin.strip() else None,
+            era=era.strip() if era and era.strip() else None,
+            original_format=original_format,
+            rights_statement=rights_statement,
+            condition_notes=condition_notes,
+            curator_note=curator_note,
+            digitized_by=digitized_by,
+            digitized_at=datetime.now(timezone.utc),
+            checksum_sha256=primary_checksum,
+        )
+        book.genres = [value.strip() for value in genre_csv.split(",") if value.strip()]
+        book.subjects = [value.strip() for value in subjects_csv.split(",") if value.strip()]
+        db.add(book)
+        db.flush()
+
+        archival_object = ArchivalObject(
+            identifier=_safe_archive_identifier(accession_no),
+            object_type=archival_object_type,
+            title=book.title,
+            description=book.description,
+            curator_user_id=current_user.id,
+            visibility="draft",
+        )
+        archival_object.intellectual_metadata = ArchivalMetadata(
+            language=book.language,
+            subjects=book.subjects,
+            genre=book.genres,
+            contributors=[item.strip() for item in book.author.split(",") if item.strip()],
+        )
+        archival_object.provenance = ArchivalProvenance(
+            source_institution=source_institution.strip() if source_institution and source_institution.strip() else None,
+            source_collection=source_collection.strip() if source_collection and source_collection.strip() else None,
+            shelfmark=shelfmark.strip() if shelfmark and shelfmark.strip() else None,
+            accession_number=provenance_accession_number.strip() if provenance_accession_number and provenance_accession_number.strip() else accession_no,
+            original_format=original_format,
+            physical_condition=condition_notes,
+            origin_place=origin.strip() if origin and origin.strip() else None,
+            digitized_by=digitized_by.strip() if digitized_by and digitized_by.strip() else None,
+            digitized_at=datetime.now(timezone.utc),
+            digitization_method=digitization_method.strip() if digitization_method and digitization_method.strip() else None,
+            scanner_device=scanner_device.strip() if scanner_device and scanner_device.strip() else None,
+            master_format=preservation_master_format.strip() if preservation_master_format and preservation_master_format.strip() else None,
+            derivative_format=derivative_format.strip() if derivative_format and derivative_format.strip() else None,
+            software=software.strip() if software and software.strip() else None,
+        )
+        archival_object.rights = ArchivalRights(
+            rights_statement=rights_statement,
+            rights_holder=rights_holder.strip() if rights_holder and rights_holder.strip() else None,
+            rights_source=rights_source.strip() if rights_source and rights_source.strip() else None,
+            notes=rights_notes.strip() if rights_notes and rights_notes.strip() else None,
+            view_allowed=True if rights_decision == "allow" else False if rights_decision == "deny" else None,
+            download_allowed=False,
+            redistribution_allowed=False,
+            commercial_use_allowed=False,
+            verified_at=datetime.now(timezone.utc) if rights_decision != "pending" else None,
+            verified_by=(current_user.full_name or f"user:{current_user.id}") if rights_decision != "pending" else None,
+        )
+        db.add(archival_object)
+        db.flush()
+        book.archival_object = archival_object
+
+        if primary_destination is not None and primary_filename is not None and primary_mime is not None and primary_checksum is not None:
+            asset_type = "pdf" if material_type == "pdf" else "text"
+            asset = BookAsset(
+                book_id=book.id,
+                asset_type=asset_type,
+                asset_role="access",
+                logical_key=None,
+                version=1,
+                original_filename=(pdf_file.filename if pdf_file else text_file.filename) or primary_filename,
+                storage_key=f"books/{primary_filename}",
+                public_url=source_url,
+                mime_type=primary_mime,
+                size_bytes=primary_destination.stat().st_size,
+                checksum_sha256=primary_checksum,
+                uploaded_by=current_user.id,
+                is_current=True,
+            )
+            db.add(asset)
+            db.flush()
+            _add_asset_storage_location(db, asset)
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=asset.id, event_type="ingestion",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail=f"Primary {asset_type} access representation ingested and SHA-256 recorded.",
+                source_storage_key=asset.storage_key, checksum=asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=asset.id, event_type="checksum_generated",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail="SHA-256 checksum generated at ingestion.", source_storage_key=asset.storage_key,
+                checksum=asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+
+        for sequence, (original_filename, image_name, image_destination, mime_type, label, width, height, canvas_identifier) in enumerate(prepared_canvases, start=1):
+            image_asset = BookAsset(
+                book_id=book.id,
+                asset_type="image",
+                asset_role="access",
+                logical_key=canvas_identifier,
+                version=1,
+                original_filename=original_filename,
+                storage_key=f"books/canvases/{image_name}",
+                public_url=None,
+                mime_type=mime_type,
+                size_bytes=image_destination.stat().st_size,
+                checksum_sha256=compute_sha256(image_destination),
+                uploaded_by=current_user.id,
+                is_current=True,
+            )
+            db.add(image_asset)
+            db.flush()
+            _add_asset_storage_location(db, image_asset)
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=image_asset.id, event_type="ingestion",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail=f"Archival image canvas {sequence} ingested and SHA-256 recorded.",
+                source_storage_key=image_asset.storage_key, checksum=image_asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=image_asset.id, event_type="checksum_generated",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail="SHA-256 checksum generated at ingestion.", source_storage_key=image_asset.storage_key,
+                checksum=image_asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+            db.add(ArchivalCanvas(
+                archival_object_id=archival_object.id,
+                asset_id=image_asset.id,
+                canvas_identifier=canvas_identifier,
+                sequence=sequence,
+                page_number=None,
+                label=label,
+                media_type=mime_type,
+                width=width,
+                height=height,
+            ))
+
+        if cover_destination is not None and cover_filename is not None and cover_url:
+            cover_asset = BookAsset(
+                book_id=book.id,
+                asset_type="cover",
+                asset_role="access",
+                logical_key=None,
+                version=1,
+                original_filename=cover_file.filename or cover_filename,
+                storage_key=f"covers/{cover_filename}",
+                public_url=cover_url,
+                mime_type={".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}.get(Path(cover_filename).suffix.lower(), "application/octet-stream"),
+                size_bytes=cover_destination.stat().st_size,
+                checksum_sha256=compute_sha256(cover_destination),
+                uploaded_by=current_user.id,
+                is_current=True,
+            )
+            db.add(cover_asset)
+            db.flush()
+            _add_asset_storage_location(db, cover_asset)
+            book.cover_path = str(cover_destination)
+
+        log_admin_activity(
+            db,
+            current_user,
+            action="book.archival_material_ingested",
+            entity_type="book",
+            entity_id=book.id,
+            metadata={
+                "title": book.title,
+                "material_type": material_type,
+                "canvas_count": len(prepared_canvases),
+                "rights_decision": rights_decision,
+                "archival_object_id": archival_object.id,
+            },
+        )
+        db.commit()
+        db.refresh(book)
+        return to_resource_read(book, include_assets=True)
+    except HTTPException:
+        db.rollback()
+        for path in saved_paths:
+            path.unlink(missing_ok=True)
+        raise
+    except Exception:
+        db.rollback()
+        for path in saved_paths:
+            path.unlink(missing_ok=True)
+        raise
+
+
+@router.post("/{book_id}/canvases", response_model=BookRead, status_code=201)
+async def add_archival_canvases_to_book(
+    book_id: int,
+    image_files: list[UploadFile] = File(...),
+    label_prefix: str | None = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    """Append one or more scanned images as independently versioned IIIF canvases."""
+    require_admin_user(current_user)
+    book = db.scalar(select(Book).where(Book.id == book_id, Book.archived_at.is_(None)))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    settings = get_settings()
+    images = [item for item in image_files if item and item.filename]
+    if not images:
+        raise HTTPException(status_code=400, detail="Choose at least one archival image")
+    existing_canvas_count = int(db.scalar(
+        select(func.count(ArchivalCanvas.id)).join(ArchivalObject, ArchivalCanvas.archival_object_id == ArchivalObject.id)
+        .where(ArchivalObject.book.has(Book.id == book.id))
+    ) or 0) if book.archival_object_id else 0
+    if existing_canvas_count + len(images) > settings.max_archival_canvas_count:
+        raise HTTPException(status_code=413, detail=f"This archival object may contain at most {settings.max_archival_canvas_count} canvases")
+
+    saved_paths: list[Path] = []
+    try:
+        archival_object = _ensure_archival_object_for_book(book, current_user)
+        db.add(archival_object)
+        db.flush()
+        next_sequence = int(db.scalar(
+            select(func.max(ArchivalCanvas.sequence)).where(ArchivalCanvas.archival_object_id == archival_object.id)
+        ) or 0) + 1
+
+        for offset, image_file in enumerate(images):
+            validate_upload_file(
+                image_file, {"image/jpeg", "image/png", "image/webp"},
+                settings.max_archival_image_upload_mb, "Archival image",
+            )
+            image_name, image_destination = await save_upload_file(
+                image_file, BOOKS_STORAGE_DIR / "canvases", "canvas.jpg",
+                settings.max_archival_image_upload_mb, "Archival image",
+            )
+            saved_paths.append(image_destination)
+            try:
+                image_info = inspect_image(image_destination)
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=f"Image '{image_file.filename}' is not a valid supported image") from exc
+            if image_info.width * image_info.height > 100_000_000:
+                raise HTTPException(status_code=413, detail=f"Image '{image_file.filename}' exceeds the 100-megapixel safety limit")
+
+            mime_type = _image_mime_type(image_info)
+            canvas_identifier = f"tl:canvas:{uuid4().hex}"
+            image_asset = BookAsset(
+                book_id=book.id, asset_type="image", asset_role="access",
+                logical_key=canvas_identifier, version=1,
+                original_filename=image_file.filename or image_name,
+                storage_key=f"books/canvases/{image_name}", public_url=None,
+                mime_type=mime_type, size_bytes=image_destination.stat().st_size,
+                checksum_sha256=compute_sha256(image_destination),
+                uploaded_by=current_user.id, is_current=True,
+            )
+            db.add(image_asset)
+            db.flush()
+            _add_asset_storage_location(db, image_asset)
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=image_asset.id, event_type="ingestion",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail=f"Additional archival canvas ingested as sequence {next_sequence + offset}.",
+                source_storage_key=image_asset.storage_key, checksum=image_asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+            db.add(PreservationEvent(
+                archival_object_id=archival_object.id, asset_id=image_asset.id, event_type="checksum_generated",
+                outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+                detail="SHA-256 checksum generated at canvas ingestion.", source_storage_key=image_asset.storage_key,
+                checksum=image_asset.checksum_sha256, checksum_algorithm="SHA-256",
+            ))
+            label = Path(image_file.filename or image_name).stem.strip() or f"Canvas {next_sequence + offset}"
+            if label_prefix and label_prefix.strip():
+                label = f"{label_prefix.strip()} {next_sequence + offset}"
+            db.add(ArchivalCanvas(
+                archival_object_id=archival_object.id, asset_id=image_asset.id,
+                canvas_identifier=canvas_identifier, sequence=next_sequence + offset,
+                page_number=None, label=label[:255], media_type=mime_type,
+                width=image_info.width, height=image_info.height,
+            ))
+
+        aggregate_limit = settings.max_archival_ingest_total_mb * 1024 * 1024
+        current_access_size = int(db.scalar(select(func.coalesce(func.sum(BookAsset.size_bytes), 0)).where(
+            BookAsset.book_id == book.id, BookAsset.asset_role == "access", BookAsset.is_current.is_(True),
+        )) or 0)
+        # The query runs after each new asset was flushed, so it already includes
+        # the newly added files. Do not add saved_paths a second time.
+        if current_access_size > aggregate_limit:
+            raise HTTPException(status_code=413, detail=f"Combined archival assets may not exceed {settings.max_archival_ingest_total_mb}MB")
+
+        _invalidate_archival_rights_review(archival_object, book)
+        log_admin_activity(
+            db, current_user, action="book.archival_canvases_added",
+            entity_type="book", entity_id=book.id,
+            metadata={"canvas_count": len(images), "archival_object_id": archival_object.id, "rights_review_invalidated": True},
+        )
+        db.commit()
+        db.refresh(book)
+        return to_resource_read(book, include_assets=True)
+    except HTTPException:
+        db.rollback()
+        for path in saved_paths:
+            path.unlink(missing_ok=True)
+        raise
+    except Exception:
+        db.rollback()
+        for path in saved_paths:
+            path.unlink(missing_ok=True)
+        raise
+
+
+@router.patch("/{book_id}/canvases/{canvas_id}/image", response_model=BookRead)
+async def replace_archival_canvas_image(
+    book_id: int,
+    canvas_id: int,
+    image_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    """Create a new version for a canvas while retaining its stable identifier."""
+    require_admin_user(current_user)
+    book = db.scalar(select(Book).where(Book.id == book_id, Book.archived_at.is_(None)))
+    if not book or not book.archival_object:
+        raise HTTPException(status_code=404, detail="Book or linked archival object not found")
+    archival_object = book.archival_object
+    if current_user.id != archival_object.curator_user_id and current_user.role != "ADMIN":
+        raise HTTPException(status_code=403, detail="You are not allowed to modify this archival object")
+    canvas = db.scalar(select(ArchivalCanvas).where(
+        ArchivalCanvas.id == canvas_id, ArchivalCanvas.archival_object_id == archival_object.id,
+    ))
+    if not canvas:
+        raise HTTPException(status_code=404, detail="Canvas not found")
+
+    settings = get_settings()
+    validate_upload_file(image_file, {"image/jpeg", "image/png", "image/webp"}, settings.max_archival_image_upload_mb, "Archival image")
+    saved_path: Path | None = None
+    try:
+        image_name, image_destination = await save_upload_file(
+            image_file, BOOKS_STORAGE_DIR / "canvases", "canvas.jpg",
+            settings.max_archival_image_upload_mb, "Archival image",
+        )
+        saved_path = image_destination
+        try:
+            image_info = inspect_image(image_destination)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Replacement is not a valid supported image") from exc
+        if image_info.width * image_info.height > 100_000_000:
+            raise HTTPException(status_code=413, detail="Image exceeds the 100-megapixel safety limit")
+
+        current_asset = db.scalar(select(BookAsset).where(
+            BookAsset.id == canvas.asset_id, BookAsset.book_id == book.id,
+        )) if canvas.asset_id else None
+        aggregate_limit = settings.max_archival_ingest_total_mb * 1024 * 1024
+        current_access_size = int(db.scalar(select(func.coalesce(func.sum(BookAsset.size_bytes), 0)).where(
+            BookAsset.book_id == book.id,
+            BookAsset.asset_role == "access",
+            BookAsset.is_current.is_(True),
+        )) or 0)
+        previous_size = current_asset.size_bytes if current_asset and current_asset.is_current else 0
+        replacement_size = image_destination.stat().st_size
+        if current_access_size - previous_size + replacement_size > aggregate_limit:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Combined archival assets may not exceed {settings.max_archival_ingest_total_mb}MB",
+            )
+        if current_asset:
+            _withdraw_current_access_asset(
+                db, asset=current_asset, archival_object=archival_object, current_user=current_user,
+                detail=f"Canvas {canvas.canvas_identifier} image version withdrawn after replacement.",
+            )
+        version = _asset_version(db, book_id=book.id, asset_type="image", logical_key=canvas.canvas_identifier)
+        mime_type = _image_mime_type(image_info)
+        replacement = BookAsset(
+            book_id=book.id, asset_type="image", asset_role="access",
+            logical_key=canvas.canvas_identifier, version=version,
+            original_filename=image_file.filename or image_name,
+            storage_key=f"books/canvases/{image_name}", public_url=None,
+            mime_type=mime_type, size_bytes=image_destination.stat().st_size,
+            checksum_sha256=compute_sha256(image_destination), uploaded_by=current_user.id, is_current=True,
+            source_asset_id=current_asset.id if current_asset else None,
+            derivation_type="replacement",
+        )
+        db.add(replacement)
+        db.flush()
+        _add_asset_storage_location(db, replacement)
+        db.add(PreservationEvent(
+            archival_object_id=archival_object.id, asset_id=replacement.id, event_type="ingestion",
+            outcome="success", agent=current_user.full_name or f"user:{current_user.id}",
+            detail=f"Canvas {canvas.canvas_identifier} received asset version {version}.",
+            source_storage_key=replacement.storage_key, checksum=replacement.checksum_sha256, checksum_algorithm="SHA-256",
+        ))
+        canvas.asset_id = replacement.id
+        canvas.media_type = mime_type
+        canvas.width = image_info.width
+        canvas.height = image_info.height
+        _invalidate_archival_rights_review(archival_object, book)
+        log_admin_activity(
+            db, current_user, action="archival_canvas.image_replaced",
+            entity_type="archival_canvas", entity_id=canvas.id,
+            metadata={"book_id": book.id, "asset_id": replacement.id, "version": version, "rights_review_invalidated": True},
+        )
+        db.commit()
+        db.refresh(book)
+        return to_resource_read(book, include_assets=True)
+    except HTTPException:
+        db.rollback()
+        if saved_path:
+            saved_path.unlink(missing_ok=True)
+        raise
+    except Exception:
+        db.rollback()
+        if saved_path:
+            saved_path.unlink(missing_ok=True)
+        raise
 
 
 @router.post("/upload-pdf", response_model=BookRead, status_code=201)
@@ -1208,7 +1942,10 @@ async def update_book_pdf_only(
         select(BookAsset).where(BookAsset.book_id == book.id, BookAsset.asset_type == "pdf", BookAsset.asset_role == "access", BookAsset.is_current.is_(True))
     ).all()
     for previous in previous_assets:
-        previous.is_current = False
+        _withdraw_current_access_asset(
+            db, asset=previous, archival_object=book.archival_object, current_user=current_user,
+            detail="PDF access version withdrawn after replacement.",
+        )
     previous_version = db.scalar(
         select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "pdf", BookAsset.asset_role == "access")
     ) or 0
@@ -1220,6 +1957,8 @@ async def update_book_pdf_only(
     )
     db.add(asset)
     db.flush()
+    if book.archival_object is not None:
+        _invalidate_archival_rights_review(book.archival_object, book)
     db.add(AssetStorageLocation(
         asset_id=asset.id, provider="local", storage_key=asset.storage_key,
         public_url=asset.public_url, status="active", is_primary=True,
@@ -1244,6 +1983,80 @@ async def update_book_pdf_only(
     db.refresh(book)
 
     return to_resource_read(book, include_assets=True)
+
+
+@router.patch("/{book_id}/update-text", response_model=BookRead)
+async def update_book_text(
+    book_id: int,
+    text_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> BookRead:
+    """Replace a plain-text access representation as a new immutable asset version."""
+    require_admin_user(current_user)
+    book = db.scalar(select(Book).where(Book.id == book_id, Book.archived_at.is_(None)))
+    if not book:
+        raise HTTPException(status_code=404, detail="Book not found")
+    settings = get_settings()
+    validate_upload_file(text_file, {"text/plain", "text/markdown"}, settings.max_text_upload_mb, "Plain text")
+    destination: Path | None = None
+    try:
+        filename, destination = await save_upload_file(
+            text_file, BOOKS_STORAGE_DIR, "source.txt", settings.max_text_upload_mb, "Plain text",
+        )
+        try:
+            content = destination.read_text(encoding="utf-8")
+        except UnicodeDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Text source must be valid UTF-8") from exc
+        if not content.strip() or "\x00" in content:
+            raise HTTPException(status_code=400, detail="Text source is empty or contains binary data")
+
+        current_assets = db.scalars(select(BookAsset).where(
+            BookAsset.book_id == book.id, BookAsset.asset_type == "text",
+            BookAsset.asset_role == "access", BookAsset.is_current.is_(True),
+            BookAsset.logical_key.is_(None),
+        )).all()
+        for previous in current_assets:
+            _withdraw_current_access_asset(
+                db, asset=previous, archival_object=book.archival_object, current_user=current_user,
+                detail="Text access version withdrawn after replacement.",
+            )
+        version = _asset_version(db, book_id=book.id, asset_type="text", logical_key=None)
+        checksum = compute_sha256(destination)
+        asset = BookAsset(
+            book_id=book.id, asset_type="text", asset_role="access", logical_key=None, version=version,
+            original_filename=text_file.filename or filename, storage_key=f"books/{filename}", public_url=None,
+            mime_type="text/plain; charset=utf-8", size_bytes=destination.stat().st_size,
+            checksum_sha256=checksum, uploaded_by=current_user.id, is_current=True,
+            source_asset_id=current_assets[0].id if current_assets else None,
+            derivation_type="replacement",
+        )
+        db.add(asset)
+        db.flush()
+        _add_asset_storage_location(db, asset)
+        book.source_type = "text"
+        book.source_url = None
+        book.source_path = str(destination)
+        book.mime_type = "text/plain; charset=utf-8"
+        book.content_text = content
+        book.checksum_sha256 = checksum
+        book.digitized_at = datetime.now(timezone.utc)
+        if book.archival_object is not None:
+            _invalidate_archival_rights_review(book.archival_object, book)
+        log_admin_activity(db, current_user, action="book.text_replaced", entity_type="book", entity_id=book.id, metadata={"filename": filename, "version": version})
+        db.commit()
+        db.refresh(book)
+        return to_resource_read(book, include_assets=True)
+    except HTTPException:
+        db.rollback()
+        if destination:
+            destination.unlink(missing_ok=True)
+        raise
+    except Exception:
+        db.rollback()
+        if destination:
+            destination.unlink(missing_ok=True)
+        raise
 
 
 @router.patch("/{book_id}", response_model=BookRead)
@@ -1384,7 +2197,10 @@ async def upload_book_cover(
         select(BookAsset).where(BookAsset.book_id == book.id, BookAsset.asset_type == "cover", BookAsset.asset_role == "access", BookAsset.is_current.is_(True))
     ).all()
     for previous in previous_assets:
-        previous.is_current = False
+        _withdraw_current_access_asset(
+            db, asset=previous, archival_object=book.archival_object, current_user=current_user,
+            detail="PDF access version withdrawn after replacement.",
+        )
     previous_version = db.scalar(
         select(func.max(BookAsset.version)).where(BookAsset.book_id == book.id, BookAsset.asset_type == "cover", BookAsset.asset_role == "access")
     ) or 0
@@ -1435,10 +2251,20 @@ def publish_book(
         raise HTTPException(status_code=404, detail="Book not found")
     if book.archived_at is not None:
         raise HTTPException(status_code=400, detail="Archived books cannot be published")
-    if not book.source_path:
-        raise HTTPException(status_code=400, detail="A digital document is required before publishing")
+    has_current_canvas_asset = bool(
+        book.archival_object
+        and any(canvas.asset and canvas.asset.is_current and canvas.asset.asset_role == "access" for canvas in book.archival_object.canvases)
+    )
+    has_primary_document = bool(book.source_path)
+    if not has_primary_document and not has_current_canvas_asset:
+        raise HTTPException(status_code=400, detail="A supported digital representation (PDF, text, or archival image sequence) is required before publishing")
+    if book.archival_object is not None:
+        rights = book.archival_object.rights
+        if rights is None or rights.verified_at is None or rights.view_allowed is None:
+            raise HTTPException(status_code=409, detail="Complete the archival rights review before publishing this record")
+        book.archival_object.visibility = "published" if rights.view_allowed is True else "restricted"
     book.visibility = "published"
-    log_admin_activity(db, current_user, action="book.published", entity_type="book", entity_id=book.id, metadata={"title": book.title})
+    log_admin_activity(db, current_user, action="book.published", entity_type="book", entity_id=book.id, metadata={"title": book.title, "archival_object_visibility": book.archival_object.visibility if book.archival_object else None})
     db.commit()
     db.refresh(book)
     return to_resource_read(book, include_assets=True)

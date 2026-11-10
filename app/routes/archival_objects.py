@@ -13,6 +13,8 @@ from app.models.archival_provenance import ArchivalProvenance
 from app.models.archival_rights import ArchivalRights
 from app.models.collection import Collection
 from app.models.user import User
+from app.schemas.archival_rights import ArchivalRightsReviewRequest
+from app.services.admin_activity import log_admin_activity
 from app.schemas.archival_object import (
     ArchivalObjectAdminRead,
     ArchivalObjectCreate,
@@ -110,6 +112,19 @@ def admin_list_archival_objects(
         select(ArchivalObject).order_by(ArchivalObject.updated_at.desc(), ArchivalObject.id.desc())
     ).all()
     return [_admin_read(row) for row in rows]
+
+
+@router.get("/admin/{object_id}", response_model=ArchivalObjectAdminRead)
+def admin_get_archival_object(
+    object_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchivalObjectAdminRead:
+    row = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
+    if not row:
+        raise HTTPException(status_code=404, detail="Archival object not found")
+    require_archival_curator(current_user, row.curator_user_id)
+    return _admin_read(row)
 
 
 @router.patch("/admin/{object_id}", response_model=ArchivalObjectAdminRead)
@@ -223,6 +238,62 @@ def assign_archival_curator(
         row.curator_user_id = None
 
     db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _admin_read(row)
+
+
+
+
+@router.post("/admin/{object_id}/rights-review", response_model=ArchivalObjectAdminRead)
+def review_archival_rights(
+    object_id: int,
+    payload: ArchivalRightsReviewRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> ArchivalObjectAdminRead:
+    """Record an explicit, auditable decision for online access to an object."""
+    row = db.scalar(select(ArchivalObject).where(ArchivalObject.id == object_id))
+    if not row:
+        raise HTTPException(status_code=404, detail="Archival object not found")
+    require_archival_curator(current_user, row.curator_user_id)
+    if payload.decision == "allow" and not (payload.rights_source and payload.rights_source.strip()):
+        raise HTTPException(status_code=400, detail="An evidence source is required before approving online viewing")
+
+    if row.rights is None:
+        row.rights = ArchivalRights(archival_object=row)
+    rights = row.rights
+    rights.rights_statement = payload.rights_statement
+    rights.rights_holder = payload.rights_holder
+    rights.rights_source = payload.rights_source
+    rights.license = payload.license
+    rights.access_conditions = payload.access_conditions
+    rights.reproduction_conditions = payload.reproduction_conditions
+    rights.attribution = payload.attribution
+    rights.notes = payload.notes
+    rights.download_allowed = payload.download_allowed
+    rights.redistribution_allowed = payload.redistribution_allowed
+    rights.commercial_use_allowed = payload.commercial_use_allowed
+    rights.view_allowed = True if payload.decision == "allow" else False if payload.decision == "deny" else None
+    rights.verified_at = datetime.now(timezone.utc) if payload.decision != "pending" else None
+    rights.verified_by = (current_user.full_name or f"user:{current_user.id}") if payload.decision != "pending" else None
+
+    linked_book = row.book
+    if payload.decision == "allow":
+        row.visibility = "published" if linked_book and linked_book.visibility == "published" else "draft"
+    elif payload.decision == "deny":
+        row.visibility = "restricted"
+    else:
+        row.visibility = "draft"
+
+    log_admin_activity(
+        db,
+        current_user,
+        action="archival_object.rights_reviewed",
+        entity_type="archival_object",
+        entity_id=row.id,
+        metadata={"decision": payload.decision, "book_id": linked_book.id if linked_book else None},
+    )
     db.commit()
     db.refresh(row)
     return _admin_read(row)

@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     storage_dir: str = "storage"
     storage_provider: str = "local"
     max_pdf_upload_mb: int = 150
+    max_text_upload_mb: int = 20
+    max_archival_image_upload_mb: int = 40
+    max_archival_canvas_count: int = 200
+    max_archival_ingest_total_mb: int = 512
     max_cover_upload_mb: int = 10
     max_avatar_upload_mb: int = 5
 

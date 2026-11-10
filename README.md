@@ -56,3 +56,7 @@ transcription spans, verified OCR spans, and media time ranges. Existing
 `page_number` fields remain for compatibility and are populated only for PDF
 anchors. See `docs/ARCHITECTURE.md`, `docs/DOMAINS.md`, and
 `docs/DEVELOPMENT.md` for the source-locator contract.
+
+## Source-anchor validation
+
+See [`docs/READER-HTTP-ACCEPTANCE.md`](docs/READER-HTTP-ACCEPTANCE.md) for the FastAPI HTTP regression flow and production PostgreSQL acceptance boundary.

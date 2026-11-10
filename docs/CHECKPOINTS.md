@@ -94,3 +94,21 @@ Android/iOS runtime acceptance remain pending because this checkpoint excludes
 passes 150 tests under the documented test-only `passlib` import shim; Python
 compilation and migration graph validation are run separately. No `storage/`
 folder, PDF, or private `.env` is packaged.
+
+
+## Sprint 7 — T5.8 Integrated Reader acceptance (2026-11-09)
+
+- Added `tests/test_reader_source_anchor_http_integration.py`, which exercises the FastAPI routes through HTTP using an isolated SQLite database. It verifies source-anchor create/read/list, private ownership, Bookmark/Highlight/Notebook Note/QuoteReference propagation, highlight development into a note, canvas-aware citation output, and backward-compatible page-only Bookmark/Highlight records.
+- Recorded the API acceptance procedure and production migration boundary in `docs/READER-HTTP-ACCEPTANCE.md`.
+- Validation: **151 backend tests passed**, Python compilation passed, and Alembic reports a single head at `e4b7c9d2a601`. The local test execution used a temporary test-only `passlib` import shim because that package was not installed in the execution environment; it is not included in application code.
+- Production PostgreSQL migration and native Android/iOS end-to-end acceptance remain outstanding. The `storage/` directory and all archival PDFs remain excluded from the checkpoint.
+
+
+## 2026-11-09 — Admin multi-material archival ingestion
+
+Backend Admin ingestion now supports PDF, UTF-8 text, and image-only facsimile plus supplementary ordered canvas images. Canvas assets use stable logical keys for independent versioning. Existing Books can gain canvases; source changes invalidate prior rights review and withdraw public IIIF until re-review. Replacement enforces aggregate current-access size limits. Rights approval requires evidence, and public IIIF/OCR delivery fails closed without verified allow. Replacement enforces aggregate limits without double-counting appended assets and derives image MIME from decoded bytes, not the uploaded suffix. Withdrawn/replaced image versions are retained as non-current and recorded in preservation history. Regression coverage: see `tests/test_admin_multi_material_ingestion.py`.
+
+
+## 2026-11-10 — Admin preservation dashboard contract
+
+Added `GET /preservation-events/admin/{object_id}/dashboard`, an Admin-only aggregate for all logical asset versions, safe storage-copy status fields, and append-only preservation events. Physical storage keys and public URLs are excluded from this dashboard response. Added regression coverage for the endpoint and for descriptive metadata/provenance updates through the existing ArchivalObject PATCH contract. Complete backend test suite: 161 passed. No migration required.

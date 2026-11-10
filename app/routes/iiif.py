@@ -28,6 +28,9 @@ def _public_object(object_id: int, db: Session) -> ArchivalObject:
     )
     if not row:
         raise HTTPException(status_code=404, detail="Archival object not found")
+    rights = row.rights
+    if not rights or rights.view_allowed is not True or rights.verified_at is None:
+        raise HTTPException(status_code=403, detail="A verified archival rights decision is required for public IIIF access")
     return row
 
 

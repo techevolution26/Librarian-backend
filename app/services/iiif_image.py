@@ -25,6 +25,7 @@ class IIIFImageRequest:
 class IIIFImageInfo:
     width: int
     height: int
+    format: str
 
 
 def _positive_int(value: str, label: str) -> int:
@@ -101,7 +102,10 @@ def inspect_image(path: Path) -> IIIFImageInfo:
     try:
         with Image.open(path) as source:
             image = ImageOps.exif_transpose(source)
-            return IIIFImageInfo(width=image.width, height=image.height)
+            image_format = (source.format or "").upper()
+            if image_format not in {"JPEG", "PNG", "WEBP"}:
+                raise ValueError("Only JPEG, PNG, and WebP image content is supported")
+            return IIIFImageInfo(width=image.width, height=image.height, format=image_format)
     except (UnidentifiedImageError, Image.DecompressionBombError, OSError) as exc:
         raise ValueError("Stored asset is not a readable image") from exc
 

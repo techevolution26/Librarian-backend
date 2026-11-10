@@ -45,7 +45,7 @@ def test_inspect_image_reports_dimensions(tmp_path: Path) -> None:
     source = tmp_path / "source.jpg"
     Image.new("RGB", (640, 480), "white").save(source)
     info = inspect_image(source)
-    assert info == IIIFImageInfo(width=640, height=480)
+    assert info == IIIFImageInfo(width=640, height=480, format="JPEG")
 
 
 def test_info_document_is_iiif_image_service() -> None:
